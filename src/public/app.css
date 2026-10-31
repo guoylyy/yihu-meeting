@@ -9,7 +9,6 @@
   --accent: #d2521e;
   --danger: #c2281d;
   --vvh: 100dvh;
-  --kb: 0px;
 }
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -117,6 +116,7 @@ textarea { display: block; resize: vertical; }
 }
 
 /* 详情 */
+.page.detail { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .back { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; color: var(--muted); text-decoration: none; }
 .detail .top { align-items: center; padding: 0; }
 .m-title { margin: 4px 0; font-size: 22px; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
@@ -125,16 +125,17 @@ textarea { display: block; resize: vertical; }
 .chips li { max-width: 100%; padding: 2px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; font-size: 14px; overflow-wrap: anywhere; }
 .plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .actions { display: flex; gap: 8px; margin-top: 12px; }
-.note-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.save-state { min-width: 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; text-align: right; }
+.note-head { display: flex; align-items: center; gap: 12px; margin: 16px 0 8px; }
+.note-head .group { margin: 0; }
+.save-state { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; text-align: right; }
 .ai-msg { margin: 8px 0 0; padding: 8px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
-/* 手机上提炼按钮固定在底部，键盘弹起时停在键盘上方 */
-.ai-bar { position: fixed; left: 0; right: 0; bottom: var(--kb); z-index: 5; padding: 8px 12px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); }
+.ai-msg.quiet { padding: 0; background: none; border: 0; color: var(--muted); }
 .btn.danger { color: var(--danger); }
 .btn.primary.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 
-.block { margin-top: 12px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
-.block h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+.block { margin-top: 12px; padding: 4px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.block h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .block .note-line { margin: 0 0 4px; }
 .items { margin: 0; padding: 0; list-style: none; }
 .item { display: flex; align-items: center; gap: 4px; min-height: 44px; border-bottom: 1px solid var(--line); }
@@ -142,9 +143,13 @@ textarea { display: block; resize: vertical; }
 .item-main { flex: 1; min-width: 0; padding: 8px 0; }
 .item-text { display: block; overflow-wrap: anywhere; }
 .mini { flex: none; min-height: 44px; min-width: 44px; padding: 0 8px; background: none; border: 0; color: var(--accent); }
-.add { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 8px; }
-.block[data-kind="todo"] .add { grid-template-columns: 1fr 1fr; }
-.block[data-kind="todo"] .add input[name="text"], .block[data-kind="todo"] .add .btn { grid-column: 1 / -1; }
+.add { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 4px 0 8px; }
+.add[hidden] { display: none; }
+/* 手机上待办排两行：标题 + 添加 / 负责人 + 日期 */
+.block[data-kind="todo"] .add { grid-template-columns: 1fr 1fr auto; }
+.block[data-kind="todo"] .add input[name="text"] { grid-column: 1 / 3; }
+.block[data-kind="todo"] .add input[name="due"] { grid-column: 2 / -1; }
+.block[data-kind="todo"] .add .btn { grid-area: 1 / 3; }
 .add input { background: var(--bg); }
 .copy-buffer { position: fixed; top: 0; left: -9999px; }
 
@@ -175,8 +180,6 @@ textarea { display: block; resize: vertical; }
   .sheet-foot.two { display: flex; justify-content: flex-end; }
   .confirm { inset: 0; width: 400px; height: fit-content; border-radius: 14px; }
   .row:hover .title { color: var(--accent); }
-  .ai-bar { position: static; margin-top: 12px; padding: 0; background: none; border: 0; }
-  .ai-bar .btn.wide { width: auto; }
   .block[data-kind="todo"] .add { grid-template-columns: 1fr 120px 150px auto; }
-  .block[data-kind="todo"] .add input[name="text"], .block[data-kind="todo"] .add .btn { grid-column: auto; }
+  .block[data-kind="todo"] .add input[name], .block[data-kind="todo"] .add .btn { grid-area: auto; }
 }

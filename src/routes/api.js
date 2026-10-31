@@ -74,7 +74,7 @@ export function apiRouter({ ws, meetings, users, llm, aiTimeoutMs, requireReady,
     const out = await extractNotes(saved.content, { llm, title: m.title, date: toLocal(m.starts_at).slice(0, 10), tz: tzName(), timeoutMs: aiTimeoutMs })
     const count = out.ok ? await meetings.replaceItems(req.me.id, req.params.id, out.summary) : 0
     ws.track(req.me, 'note.extract', { meetingId: m.id, ok: out.ok, reason: out.reason, count })
-    res.json({ ok: out.ok, reason: out.reason, message: out.message ?? (count ? '' : '没有提炼出内容，可以手动补充。'), count, saved_at: saved.saved_at })
+    res.json({ ok: out.ok, reason: out.reason, message: out.message ?? (count ? '' : '这次没提炼出内容，可以手动补'), count, saved_at: saved.saved_at })
   }))
 
   r.get('/meetings/:id/blocks.html', ...data, wrap(async (req, res) => {

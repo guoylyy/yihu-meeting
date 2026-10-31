@@ -1,7 +1,10 @@
 <% for (const b of blocks) { %>
   <section class="block" data-kind="<%= b.kind %>">
-    <h2><%= b.label %></h2>
-    <% if (b.kind === 'todo') { %><p class="note-line">点「复制」后，粘到「收件箱」的快速录入即可。</p><% } %>
+    <div class="block-head">
+      <h2 id="block-<%= b.kind %>"><%= b.label %><% if (b.items.length) { %> · <%= b.items.length %><% } %></h2>
+      <% if (mine) { %><button class="mini" type="button" data-toggle aria-expanded="false" aria-controls="add-<%= b.kind %>" aria-describedby="block-<%= b.kind %>">添加</button><% } %>
+    </div>
+    <% if (b.kind === 'todo' && b.items.length) { %><p class="note-line">点「复制」后，粘到「收件箱」的快速录入即可。</p><% } %>
     <% if (b.items.length) { %>
       <ul class="items">
         <% for (const i of b.items) { %>
@@ -20,11 +23,9 @@
           </li>
         <% } %>
       </ul>
-    <% } else if (!mine) { %>
-      <p class="note-line">暂无</p>
     <% } %>
     <% if (mine) { %>
-      <form class="add" autocomplete="off">
+      <form class="add" id="add-<%= b.kind %>" autocomplete="off" hidden>
         <input name="text" type="text" maxlength="500" placeholder="补一条<%= b.label %>" aria-label="补一条<%= b.label %>" enterkeyhint="done">
         <% if (b.kind === 'todo') { %>
           <input name="owner" type="text" maxlength="50" placeholder="负责人" aria-label="负责人">

@@ -50,7 +50,7 @@ const search = (who, q) => who.get(`/api/meetings?q=${encodeURIComponent(q)}`)
 test('/health 免登录，返回规定格式', async () => {
   const r = await fetch(`${h.base}/health`)
   assert.equal(r.status, 200)
-  assert.deepEqual(await r.json(), { status: 'ok', version: '0.1.0' })
+  assert.deepEqual(await r.json(), { status: 'ok', version: '0.1.1' })
 })
 
 test('版本号三处一致：清单、package.json、页面', async () => {
@@ -412,7 +412,7 @@ test('提炼：模型说四块都没有，给一句说明', async () => {
   const m = await create(alice)
   const r = await extract(alice, m.id)
   assert.equal(r.json.ok, true)
-  assert.match(r.json.message, /没有提炼出内容/)
+  assert.equal(r.json.message, '这次没提炼出内容，可以手动补')
 })
 
 test('上报：提炼和保存的 detail 里没有原文', async () => {
@@ -463,6 +463,48 @@ test('条目：页面里待办的复制按钮带一行文本，并说明粘到�
   assert.ok(text.includes('data-copy="整理客户名单 @郑国栋 11-02"'))
   assert.match(text, /粘到「收件箱」的快速录入/)
   assert.equal((text.match(/data-copy=/g) || []).length, 1) // 只有待办有复制
+})
+
+test('条目：表单默认收起，标题带条数，每块一个添加按钮', async () => {
+  const m = await withNote(alice)
+  await extract(alice, m.id)
+  const { text } = await alice.get(`/api/meetings/${m.id}/blocks.html`)
+  assert.match(text, />决议 · 1</)
+  assert.match(text, />待办 · 1</)
+  assert.equal((text.match(/<form class="add"[^>]* hidden>/g) || []).length, 4)
+  assert.equal((text.match(/<form /g) || []).length, 4)
+  assert.equal((text.match(/data-toggle aria-expanded="false"/g) || []).length, 4)
+})
+
+test('条目：待办表单保留标题、负责人、日期三栏', async () => {
+  const m = await create(alice)
+  const { text } = await alice.get(`/api/meetings/${m.id}/blocks.html`)
+  const todo = text.slice(text.indexOf('id="add-todo"'), text.indexOf('</form>', text.indexOf('id="add-todo"')))
+  for (const name of ['name="text"', 'name="owner"', 'name="due"']) assert.ok(todo.includes(name), name)
+})
+
+test('条目：空的块只有标题和添加，待办没条目时不显示收件箱说明', async () => {
+  const m = await create(alice)
+  const { text } = await alice.get(`/api/meetings/${m.id}/blocks.html`)
+  assert.equal((text.match(/>\s*(决议|待办|风险|下次议题)\s*<\/h2>/g) || []).length, 4) // 没有条数
+  assert.ok(!text.includes('note-line'))
+  assert.ok(!text.includes('<ul'))
+  assert.equal((text.match(/data-toggle/g) || []).length, 4)
+})
+
+test('条目：参与人看到标题和条目，没有添加入口，空的块不写暂无', async () => {
+  const m = await create(alice, { attendee_ids: [BOB] })
+  await alice.post(`/api/meetings/${m.id}/items`, { kind: 'risk', text: '风险' })
+  const { text } = await bob.get(`/api/meetings/${m.id}/blocks.html`)
+  assert.match(text, />风险 · 1</)
+  for (const absent of ['data-toggle', '<form', 'data-del', '暂无']) assert.ok(!text.includes(absent), absent)
+})
+
+test('详情页：提炼按钮在纪要标题行，参与人没有', async () => {
+  const m = await create(alice, { attendee_ids: [BOB] })
+  const head = (html) => html.slice(html.indexOf('class="note-head"'), html.indexOf('</div>', html.indexOf('class="note-head"')))
+  assert.ok(head((await alice.get(`/meetings/${m.id}`)).text).includes('id="extract-btn"'))
+  assert.ok(!(await bob.get(`/meetings/${m.id}`)).text.includes('id="extract-btn"'))
 })
 
 // ---------- 列表 ----------

@@ -1,7 +1,9 @@
 // 真机式实测：独立实例 + 临时库，经 /apps/meeting 前缀访问（和平台拓扑一致）。截图和报告写到 artifacts/
 //   npm run e2e
-import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { execFileSync, execSync, spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import mysql from 'mysql2/promise'
 import { chromium, webkit } from 'playwright-core'
 import { startFakePlatform } from '../test/support/fake-platform.mjs'
@@ -12,6 +14,7 @@ const PLATFORM_PORT = APP_PORT + 1
 const DB_PORT = 3352
 const NAME = 'meeting-e2e-mysql'
 const OUT = 'artifacts/e2e'
+const BASELINE = '5483b80' // v0.1.0：折叠前的页面，用来量高度差
 const SIZES = [['375', 375, 667], ['768', 768, 1024], ['1440', 1440, 900]]
 const MINUTE = 60_000
 const LONG_TITLE = '第四季度华东区全部经销商返利对账与年度框架协议续签条款复核专题会议（含法务、财务、销售三方），需要逐条确认修订版本AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
@@ -77,13 +80,10 @@ async function audit(page, label) {
   for (const item of await page.evaluate(SMALL_TARGETS)) report.under44.push(`${label}: ${item}`)
 }
 
-/** 长截图里固定底栏会落在页面中间，临时归位。CSP 不许内联样式，只能走 CSSOM */
-async function fullShot(page, path) {
-  const toggle = (value) => page.evaluate((v) => { const bar = document.querySelector('.ai-bar'); if (bar) bar.style.position = v }, value)
-  await toggle('static')
-  await page.screenshot({ path, fullPage: true })
-  await toggle('')
-}
+const fullShot = (page, path) => page.screenshot({ path, fullPage: true })
+const block = (kind) => `.block[data-kind="${kind}"]`
+const openAdd = (page, kind) => page.click(`${block(kind)} [data-toggle]`)
+const pageHeight = (page) => page.evaluate(() => document.documentElement.scrollHeight)
 
 async function loginContext(browser, userId, viewport, options = {}) {
   platform.state.loginAs = userId
@@ -133,7 +133,7 @@ try {
     // 列表
     await page.screenshot({ path: `${OUT}/${tag}-list.png` })
     await audit(page, `${label} 列表`)
-    check(`${label} 版本号 v0.1.0 在右上角`, (await page.textContent('#version')) === 'v0.1.0')
+    check(`${label} 版本号 v0.1.1 在右上角`, (await page.textContent('#version')) === 'v0.1.1')
     const ver = await page.locator('#version').boundingBox()
     check(`${label} 版本号靠右上`, ver.x + ver.width > width / 2 && ver.y < 60, `x=${Math.round(ver.x)} y=${Math.round(ver.y)}`)
     check(`${label} 分组：即将开始、最近结束`, await page.locator('h2.group').allTextContents().then((t) => t.join() === '即将开始,最近结束'))
@@ -208,19 +208,42 @@ try {
     await fullShot(page, `${OUT}/${tag}-detail.png`)
     await audit(page, `${label} 详情`)
     const bar = await page.locator('#extract-btn').boundingBox()
-    if (tag !== '1440') check(`${label} 提炼按钮固定在底部`, bar.y + bar.height <= height && bar.y > height - 100, `bottom=${Math.round(bar.y + bar.height)}/${height}`)
+    const noteTitle = await page.locator('.note-head h2').boundingBox()
+    check(`${label} 提炼按钮和纪要标题同一行、靠右`, bar.y < noteTitle.y + noteTitle.height && noteTitle.y < bar.y + bar.height && bar.x > noteTitle.x + noteTitle.width && bar.x + bar.width > width * 0.4, `btn=(${Math.round(bar.x)},${Math.round(bar.y)}) title=(${Math.round(noteTitle.x)},${Math.round(noteTitle.y)})`)
+    check(`${label} 提炼按钮在文档流里`, await page.evaluate(() => getComputedStyle(document.getElementById('extract-btn').parentElement).position) === 'static')
+
+    // 空块：只有标题和添加，没有表单，没有说明
+    check(`${label} 空块没有表单和说明`, await page.locator('.block .add:visible, .block .note-line').count() === 0)
+    check(`${label} 空块标题不带条数`, (await page.locator('.block h2').allTextContents()).join() === '决议,待办,风险,下次议题')
+    check(`${label} 空块添加按钮齐全`, (await page.locator('.block [data-toggle]').allTextContents()).join() === '添加,添加,添加,添加')
+    await fullShot(page, `${OUT}/${tag}-blocks-empty.png`)
 
     // AI 失败：原文保存，四块空，一句说明
     platform.state.llm = () => '抱歉我不知道'
     await page.fill('#note', NOTES)
     await page.click('#extract-btn')
     await page.waitForSelector('#ai-msg:not([hidden])')
+    check(`${label} AI 失败提示不是灰字`, await page.locator('#ai-msg.quiet').count() === 0)
     check(`${label} AI 失败有说明`, (await page.textContent('#ai-msg')).includes('纪要已保存'), await page.textContent('#ai-msg'))
     check(`${label} AI 失败四块留空`, await page.locator('.item').count() === 0)
     await fullShot(page, `${OUT}/${tag}-ai-failed.png`)
     await page.reload()
     await page.waitForSelector('#note')
     check(`${label} AI 失败后原文还在`, (await page.inputValue('#note')) === NOTES)
+
+    // 模型说四块都没有：一行灰字
+    platform.state.llm = () => JSON.stringify({ decisions: [], todos: [], risks: [], nextAgenda: [] })
+    await page.click('#extract-btn')
+    await page.waitForSelector('#ai-msg:not([hidden])')
+    const quiet = await page.evaluate(() => {
+      const el = document.getElementById('ai-msg')
+      const s = getComputedStyle(el)
+      return { text: el.textContent, color: s.color, muted: getComputedStyle(document.querySelector('.ver, .save-state')).color, border: s.borderTopWidth, height: el.getBoundingClientRect().height }
+    })
+    check(`${label} 没提炼出内容给一行灰字`, quiet.text === '这次没提炼出内容，可以手动补' && quiet.color === quiet.muted && quiet.border === '0px' && quiet.height < 30, JSON.stringify(quiet))
+    await fullShot(page, `${OUT}/${tag}-ai-nothing.png`)
+    await page.reload()
+    await page.waitForSelector('#note')
     platform.state.llm = () => JSON.stringify(SUMMARY)
 
     // AI 提炼
@@ -230,6 +253,43 @@ try {
     check(`${label} 四块都有内容`, JSON.stringify(counts) === '{"decision":1,"todo":2,"risk":2,"agenda":1}', JSON.stringify(counts))
     check(`${label} 待办有收件箱说明`, (await page.textContent('.block[data-kind="todo"] .note-line')).includes('粘到「收件箱」的快速录入'))
     await hideToast(page)
+
+    // 折叠态：四块只有标题、条目和添加
+    check(`${label} 标题带条数`, (await page.locator('.block h2').allTextContents()).join() === '决议 · 1,待办 · 2,风险 · 2,下次议题 · 1')
+    check(`${label} 折叠态没有表单`, await page.locator('.block .add:visible').count() === 0)
+    await fullShot(page, `${OUT}/${tag}-collapsed.png`)
+    await page.locator(block('todo')).screenshot({ path: `${OUT}/${tag}-todo-hint.png` })
+
+    // 展开：焦点进输入框，按钮变收起，其他块不动
+    await openAdd(page, 'todo')
+    check(`${label} 展开后焦点在输入框`, await page.evaluate(() => document.activeElement?.name === 'text' && document.activeElement.closest('.block').dataset.kind === 'todo'))
+    check(`${label} 只展开这一块`, await page.locator('.block .add:visible').count() === 1)
+    check(`${label} 展开后按钮是收起`, (await page.textContent(`${block('todo')} [data-toggle]`)) === '收起' && (await page.getAttribute(`${block('todo')} [data-toggle]`, 'aria-expanded')) === 'true')
+    for (const [state, kind] of [['添加', 'risk'], ['收起', 'todo']]) {
+      const b = await page.locator(`${block(kind)} [data-toggle]`).boundingBox()
+      check(`${label} ${state}按钮 ≥44px`, b.width >= 44 && b.height >= 44, `${b.width}×${b.height}`)
+    }
+    const f = Object.fromEntries(await Promise.all(['input[name="text"]', 'input[name="owner"]', 'input[name="due"]', '.btn'].map(async (s) => [s, await page.locator(`${block('todo')} .add ${s}`).boundingBox()])))
+    const rows = new Set(Object.values(f).map((b) => Math.round(b.y))).size
+    check(`${label} 待办表单排成 ${width < 769 ? '两行' : '一行'}`, rows === (width < 769 ? 2 : 1), `${rows} 行`)
+    await fullShot(page, `${OUT}/${tag}-expanded.png`)
+    await audit(page, `${label} 展开态`)
+
+    // Esc、收起都折叠，焦点回到按钮；写了一半的内容还在
+    await page.fill(`${block('todo')} input[name="text"]`, '写了一半')
+    await page.keyboard.press('Escape')
+    check(`${label} Esc 收起`, await page.locator('.block .add:visible').count() === 0 && (await page.textContent(`${block('todo')} [data-toggle]`)) === '添加')
+    check(`${label} 收起后焦点回到添加`, await page.evaluate(() => document.activeElement?.hasAttribute('data-toggle')))
+    await openAdd(page, 'todo')
+    check(`${label} 收起再展开内容还在`, (await page.inputValue(`${block('todo')} input[name="text"]`)) === '写了一半')
+    await openAdd(page, 'todo')
+    check(`${label} 点收起折叠`, await page.locator('.block .add:visible').count() === 0)
+
+    // 刷新不记住展开
+    await openAdd(page, 'risk')
+    await page.reload()
+    await page.waitForSelector('.block')
+    check(`${label} 刷新后收起`, await page.locator('.block .add:visible').count() === 0)
     await page.evaluate(() => document.querySelector('.block').scrollIntoView())
     await page.screenshot({ path: `${OUT}/${tag}-ai-result.png` })
     await fullShot(page, `${OUT}/${tag}-ai-result-full.png`)
@@ -242,18 +302,28 @@ try {
     await hideToast(page)
 
     // 手动补、单条删
+    await openAdd(page, 'todo')
     await page.fill('.block[data-kind="todo"] input[name="text"]', '发报价')
     await page.fill('.block[data-kind="todo"] input[name="owner"]', '王芳')
     await page.fill('.block[data-kind="todo"] input[name="due"]', '2026-11-06')
     await page.click('.block[data-kind="todo"] .add .btn')
     await page.waitForSelector('[data-copy="发报价 @王芳 11-06"]')
     check(`${label} 手动补待办`, true)
+    check(`${label} 保存后折叠、条数更新、焦点在添加`, await page.locator('.block .add:visible').count() === 0 && (await page.textContent(`${block('todo')} h2`)) === '待办 · 3' && await page.evaluate(() => document.activeElement?.matches('.block[data-kind="todo"] [data-toggle]')))
+    await openAdd(page, 'risk')
     await page.fill('.block[data-kind="risk"] input[name="text"]', '人手不够')
     await page.press('.block[data-kind="risk"] input[name="text"]', 'Enter')
     await page.waitForSelector('.block[data-kind="risk"] .item:has-text("人手不够")')
     await page.click('.block[data-kind="decision"] [data-del]')
     await page.waitForFunction(() => !document.querySelector('.block[data-kind="decision"] .item'))
     check(`${label} 单条删除`, await page.locator('.block[data-kind="risk"] .item').count() === 3)
+
+    // 待办删光：收件箱说明跟着消失
+    for (let n = await page.locator(`${block('todo')} .item`).count(); n > 0; n--) {
+      await page.click(`${block('todo')} .item:first-child [data-del]`)
+      await page.waitForFunction(([s, left]) => document.querySelectorAll(s).length === left, [`${block('todo')} .item`, n - 1])
+    }
+    check(`${label} 没待办时不显示收件箱说明`, await page.locator(`${block('todo')} .note-line`).count() === 0)
 
     // 重新提炼要确认
     await page.click('#extract-btn')
@@ -289,15 +359,6 @@ try {
     check(`${label} 取消删除`, page.url() === detailUrl)
 
     if (tag === '375') {
-      // 键盘弹起：可视区变矮，主按钮还在
-      await page.locator('#note').focus()
-      await page.setViewportSize({ width: 375, height: 380 })
-      await page.waitForTimeout(100)
-      const b = await page.locator('#extract-btn').boundingBox()
-      check('375 键盘弹起时提炼按钮仍在可视区', b.y + b.height <= 380, `bottom=${Math.round(b.y + b.height)}/380`)
-      await page.setViewportSize({ width: 375, height: 667 })
-      await page.locator('#note').blur()
-
       // 网络断开：提示不丢内容
       await page.route('**/api/meetings/*/note', (r) => r.abort())
       await page.fill('#note', '断网时写的')
@@ -330,6 +391,58 @@ try {
 
     check(`${label} 控制台无报错`, page.problems.length === 0, page.problems.join(' | ').slice(0, 300))
     await ctx.close()
+  }
+
+  // 折叠后比 v0.1.0 矮多少：旧版本从 git 取出来连同一个库，看同一场会
+  {
+    const filled = await seed(11, 'Q4 周会', -10, 50, [12, 13], NOTES)
+    const empty = await seed(11, 'Q4 周会', -10, 50, [12, 13], NOTES)
+    const rows = [
+      ...SUMMARY.decisions.map((t) => ['decision', t, null, null]),
+      ...SUMMARY.todos.map((t) => ['todo', t.title, t.owner, t.due]),
+      ...SUMMARY.risks.map((t) => ['risk', t, null, null]),
+      ...SUMMARY.nextAgenda.map((t) => ['agenda', t, null, null])
+    ]
+    for (const [kind, text, owner, due] of rows) await pool.execute("INSERT INTO meeting_item (meeting_id, kind, text, owner_name, due_date, source) VALUES (?, ?, ?, ?, ?, 'ai')", [filled, kind, text, owner, due])
+
+    const dir = mkdtempSync(join(tmpdir(), 'meeting-baseline-'))
+    execSync(`git archive ${BASELINE} src yh-app.json package.json | tar -x -C ${dir}`)
+    symlinkSync(resolve('node_modules'), join(dir, 'node_modules'))
+    const oldPort = APP_PORT + 2
+    const oldPlatform = await startFakePlatform({ port: oldPort + 1, appTarget: { host: '127.0.0.1', port: oldPort } })
+    const oldUrl = `${oldPlatform.url}/apps/meeting`
+    const oldServer = spawn(process.execPath, ['src/server.js'], {
+      cwd: dir,
+      stdio: 'inherit',
+      env: { ...process.env, NODE_ENV: 'staging', PORT: String(oldPort), DATABASE_URL: dbUrl, YH_CLIENT_ID: 'cid', YH_CLIENT_SECRET: 'secret', YH_API_URL: oldPlatform.url, YH_WEB_URL: oldPlatform.url, YH_APP_URL: oldUrl, YH_BASE_PATH: '/apps/meeting' }
+    })
+    try {
+      for (let i = 0; i < 50; i++) {
+        const r = await fetch(`http://127.0.0.1:${oldPort}/health`).catch(() => null)
+        if (r?.ok) break
+        await new Promise((res) => setTimeout(res, 200))
+      }
+      const measure = async (base, id) => {
+        const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, isMobile: false, deviceScaleFactor: 2, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' })
+        const page = await ctx.newPage()
+        await page.goto(`${base}/meetings/${id}`)
+        await page.waitForSelector('#note')
+        const height = await pageHeight(page)
+        await ctx.close()
+        return height
+      }
+      platform.state.loginAs = 11
+      for (const [name, id] of [['有内容', filled], ['空块', empty]]) {
+        const before = await measure(oldUrl, id)
+        const after = await measure(appUrl, id)
+        report.height = { ...report.height, [name]: { before, after, saved: before - after } }
+        check(`375 ${name}：折叠态比 v0.1.0 矮至少 200px`, before - after >= 200, `${before} → ${after}，少 ${before - after}px`)
+      }
+    } finally {
+      oldServer.kill()
+      await oldPlatform.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   }
 
   // 30 秒定时保存：用假时钟走时间

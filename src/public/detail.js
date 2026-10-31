@@ -73,9 +73,10 @@ if (noteEl) {
 }
 
 // ---------- AI 提炼 ----------
-function showAiMsg(text) {
+function showAiMsg(text, quiet = false) {
   aiMsg.textContent = text
   aiMsg.hidden = !text
+  aiMsg.classList.toggle('quiet', quiet)
 }
 
 async function reloadBlocks() {
@@ -103,7 +104,7 @@ $('extract-btn')?.addEventListener('click', async (e) => {
     savedAt = r.saved_at
     if (noteEl.value !== content) dirty = true
     else { forget(); setState('已保存') }
-    showAiMsg(r.message)
+    showAiMsg(r.message, r.ok)
     if (r.ok) {
       await reloadBlocks()
       if (r.count) toast(`提炼出 ${r.count} 条`)
@@ -136,7 +137,22 @@ async function copyText(text) {
   }
 }
 
+// 展开状态只在 DOM 上：重新渲染四块、刷新页面都回到收起
+function toggleAdd(block, open) {
+  const form = block.querySelector('.add')
+  const btn = block.querySelector('[data-toggle]')
+  form.hidden = !open
+  btn.textContent = open ? '收起' : '添加'
+  btn.setAttribute('aria-expanded', String(open))
+  ;(open ? form.elements.text : btn).focus()
+}
+
 blocksEl.addEventListener('click', async (e) => {
+  const toggle = e.target.closest('[data-toggle]')
+  if (toggle) {
+    const block = toggle.closest('.block')
+    return toggleAdd(block, block.querySelector('.add').hidden)
+  }
   const copy = e.target.closest('[data-copy]')
   if (copy) return toast((await copyText(copy.dataset.copy)) ? '已复制，粘到收件箱即可' : '复制失败，长按文字手动复制')
   if (!e.target.closest('[data-del]')) return
@@ -146,14 +162,23 @@ blocksEl.addEventListener('click', async (e) => {
   } catch (err) { toast(err.message) }
 })
 
+blocksEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.isComposing) return // 拼音输入时 Esc 是取消选字
+  const block = e.target.closest('.block')
+  if (block?.querySelector('.add:not([hidden])')) toggleAdd(block, false)
+})
+
 blocksEl.addEventListener('submit', async (e) => {
   e.preventDefault()
   const form = e.target
   const data = Object.fromEntries(new FormData(form))
   if (!data.text.trim()) return form.elements.text.focus()
+  const { kind } = form.closest('.block').dataset
   try {
-    await api('POST', `api/meetings/${meetingId}/items`, { ...data, kind: form.closest('.block').dataset.kind })
+    await api('POST', `api/meetings/${meetingId}/items`, { ...data, kind })
     await reloadBlocks()
+    showAiMsg('')
+    blocksEl.querySelector(`[data-kind="${kind}"] [data-toggle]`).focus()
   } catch (err) { toast(err.message) }
 })
 

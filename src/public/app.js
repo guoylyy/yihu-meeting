@@ -209,14 +209,10 @@ $('picker-done')?.addEventListener('click', () => {
   picker.close()
 })
 
-// 键盘弹起时可视区变矮，弹层和底部主按钮都跟着留在键盘上方
+// 键盘弹起时可视区变矮，弹层跟着留在键盘上方
 if (window.visualViewport) {
   const vv = window.visualViewport
-  const sync = () => {
-    const root = document.documentElement.style
-    root.setProperty('--vvh', `${vv.height}px`)
-    root.setProperty('--kb', `${Math.max(0, window.innerHeight - vv.height - vv.offsetTop)}px`)
-  }
+  const sync = () => document.documentElement.style.setProperty('--vvh', `${vv.height}px`)
   vv.addEventListener('resize', sync)
   vv.addEventListener('scroll', sync)
   sync()

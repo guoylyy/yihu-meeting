@@ -32,7 +32,10 @@
   <section class="note-area">
     <div class="note-head">
       <h2 class="group">纪要</h2>
-      <% if (meeting.mine) { %><span class="save-state" id="save-state" role="status"></span><% } %>
+      <% if (meeting.mine) { %>
+        <span class="save-state" id="save-state" role="status"></span>
+        <button class="btn primary" id="extract-btn" type="button">用 AI 提炼</button>
+      <% } %>
     </div>
     <% if (meeting.mine) { %>
       <textarea id="note" rows="10" placeholder="粘贴会议记录或笔记" aria-label="纪要正文" data-saved-at="<%= meeting.note_saved_at ? meeting.note_saved_at.toISOString() : '' %>"><%= meeting.note %></textarea>
@@ -43,12 +46,6 @@
     <% } %>
     <p class="ai-msg" id="ai-msg" role="status" hidden></p>
   </section>
-
-  <% if (meeting.mine) { %>
-    <div class="ai-bar">
-      <button class="btn primary wide" id="extract-btn" type="button">用 AI 提炼</button>
-    </div>
-  <% } %>
 
   <div id="blocks"><%- include('partials/blocks') %></div>
 </main>
