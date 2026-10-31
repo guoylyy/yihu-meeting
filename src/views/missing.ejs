@@ -1,0 +1,9 @@
+<%- include('layout/head') %>
+<main class="page">
+  <header class="top">
+    <a class="back" href="./">‹ 会议</a>
+    <% if (version) { %><span class="ver" id="version">v<%= version %></span><% } %>
+  </header>
+  <p class="empty"><%= message %></p>
+</main>
+<%- include('layout/foot') %>

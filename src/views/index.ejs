@@ -1,0 +1,27 @@
+<%- include('layout/head') %>
+<main class="page">
+  <header class="top">
+    <h1>会议与纪要</h1>
+    <% if (version) { %><span class="ver" id="version">v<%= version %></span><% } %>
+  </header>
+
+  <% if (problem) { %>
+    <p class="empty"><%= problem %></p>
+  <% } else { %>
+    <nav class="tabs" aria-label="视图">
+      <% for (const [key, label] of tabs) { %>
+        <a class="tab<%= key === view ? ' on' : '' %>" href="?view=<%= key %>" data-view="<%= key %>"<%- key === view ? ' aria-current="page"' : '' %>><%= label %></a>
+      <% } %>
+    </nav>
+
+    <input class="search" id="search" type="search" value="<%= q %>" maxlength="100" placeholder="搜标题或纪要" aria-label="搜标题或纪要" enterkeyhint="search">
+
+    <section id="list"><%- include('partials/list') %></section>
+  <% } %>
+</main>
+
+<% if (!problem) { %>
+  <button class="fab" id="new-btn" type="button">+ 新建</button>
+  <%- include('partials/form') %>
+<% } %>
+<%- include('layout/foot') %>

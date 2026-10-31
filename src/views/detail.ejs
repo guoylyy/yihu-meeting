@@ -1,0 +1,57 @@
+<%- include('layout/head') %>
+<main class="page detail">
+  <header class="top">
+    <a class="back" href="./">‹ 会议</a>
+    <% if (version) { %><span class="ver" id="version">v<%= version %></span><% } %>
+  </header>
+
+  <h1 class="m-title"><%= meeting.title %></h1>
+  <p class="meta">
+    <span class="status <%= meeting.status %>"><%= meeting.status_label %></span>
+    <span id="range"><%= meeting.range %></span>
+    <% if (meeting.location) { %><span><%= meeting.location %></span><% } %>
+  </p>
+
+  <ul class="chips" aria-label="参与人">
+    <li><%= meeting.owner.name %>（创建者）</li>
+    <% for (const a of meeting.attendees) { %><li><%= a.name %></li><% } %>
+  </ul>
+
+  <% if (meeting.agenda) { %>
+    <h2 class="group">议程</h2>
+    <p class="plain"><%= meeting.agenda %></p>
+  <% } %>
+
+  <% if (meeting.mine) { %>
+    <div class="actions">
+      <button class="btn" id="edit-btn" type="button">编辑</button>
+      <button class="btn danger" id="delete-btn" type="button">删除</button>
+    </div>
+  <% } %>
+
+  <section class="note-area">
+    <div class="note-head">
+      <h2 class="group">纪要</h2>
+      <% if (meeting.mine) { %><span class="save-state" id="save-state" role="status"></span><% } %>
+    </div>
+    <% if (meeting.mine) { %>
+      <textarea id="note" rows="10" placeholder="粘贴会议记录或笔记" aria-label="纪要正文" data-saved-at="<%= meeting.note_saved_at ? meeting.note_saved_at.toISOString() : '' %>"><%= meeting.note %></textarea>
+    <% } else if (meeting.note) { %>
+      <p class="plain" id="note-text"><%= meeting.note %></p>
+    <% } else { %>
+      <p class="note-line">还没有纪要。</p>
+    <% } %>
+    <p class="ai-msg" id="ai-msg" role="status" hidden></p>
+  </section>
+
+  <% if (meeting.mine) { %>
+    <div class="ai-bar">
+      <button class="btn primary wide" id="extract-btn" type="button">用 AI 提炼</button>
+    </div>
+  <% } %>
+
+  <div id="blocks"><%- include('partials/blocks') %></div>
+</main>
+
+<% if (meeting.mine) { %><%- include('partials/form') %><% } %>
+<%- include('layout/foot') %>

@@ -1,0 +1,24 @@
+{
+  "code": "meeting",
+  "name": "会议与纪要",
+  "icon": "🗓️",
+  "category": "效率",
+  "description": "记会议、粘纪要，AI 提炼决议、待办、风险和下次议题",
+  "version": "0.1.0",
+  "port": 3000,
+  "health": "/health",
+  "callback": "/sso/callback",
+  "mcp": "/mcp",
+  "database": true,
+  "memory": "256m",
+  "visibility": null,
+  "isDefault": false,
+  "env": {},
+  "deploy": {
+    "branch": "release",
+    "mode": "auto"
+  },
+  "ui": {
+    "responsive": true
+  }
+}
