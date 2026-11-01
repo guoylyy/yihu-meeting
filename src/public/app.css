@@ -147,4 +147,5 @@ html { scroll-padding-top: calc(var(--yh-header-h) + env(safe-area-inset-top) + 
 
 @media (max-width: 640px) {
   .import-note .note-line { font-size: 12px; } /* 375 宽刚好放得下一行 */
+  .top-icon { width: 18px; height: 18px; }
 }

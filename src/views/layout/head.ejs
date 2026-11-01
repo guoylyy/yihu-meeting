@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <base href="<%= base %>">
 <title><%= meeting ? meeting.title : '会议与纪要' %></title>
+<link rel="icon" type="image/svg+xml" href="static/icon.svg?v=<%= version %>">
 <link rel="stylesheet" href="static/yh-vi.css?v=<%= version %>">
 <link rel="stylesheet" href="static/app.css?v=<%= version %>">
 <script src="static/app.js?v=<%= version %>" defer></script>
@@ -13,7 +14,7 @@
 </head>
 <body data-tz="<%= tz %>"<% if (meeting) { %> data-id="<%= meeting.id %>"<% } %>>
 <header class="yh-top">
-  <a class="yh-top-brand" href="./"><span aria-hidden="true">🗓️</span>会议与纪要</a>
+  <a class="yh-top-brand" href="./"><svg class="top-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5.25H18a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.25a2 2 0 0 1 2-2Z"/><path d="M8 3.875V7M16 3.875V7M4 8h16M8 11h8M8 14h6"/><path d="M8 17h2.5" stroke="#d2521e"/></svg>会议与纪要</a>
   <div class="yh-top-right">
     <% if (version) { %><span class="yh-ver" id="version">v<%= version %></span><% } %>
     <details class="yh-menu" id="user-menu">

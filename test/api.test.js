@@ -50,7 +50,7 @@ const search = (who, q) => who.get(`/api/meetings?q=${encodeURIComponent(q)}`)
 test('/health 免登录，返回规定格式', async () => {
   const r = await fetch(`${h.base}/health`)
   assert.equal(r.status, 200)
-  assert.deepEqual(await r.json(), { status: 'ok', version: '0.2.1' })
+  assert.deepEqual(await r.json(), { status: 'ok', version: '0.2.2' })
 })
 
 test('版本号三处一致：清单、package.json、页面', async () => {
