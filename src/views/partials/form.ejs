@@ -1,49 +1,44 @@
-<dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
-  <form class="sheet-box" id="meeting-form" novalidate>
-    <header class="sheet-head">
+<dialog class="yh-sheet" id="sheet" aria-labelledby="sheet-title">
+  <form class="yh-sheet-box" id="meeting-form" novalidate data-defaults="<%= JSON.stringify(defaults) %>">
+    <header class="yh-sheet-head">
       <h2 id="sheet-title">新建会议</h2>
-      <button class="icon" type="button" data-close aria-label="关闭">×</button>
+      <button class="yh-btn yh-btn--text" type="button" data-close aria-label="关闭">×</button>
     </header>
-    <div class="sheet-body">
-      <label class="field"><span>标题</span>
+    <div class="yh-sheet-body">
+      <label class="yh-field"><span class="yh-label">标题</span>
         <input id="f-title" type="text" maxlength="200" required>
       </label>
-      <label class="field"><span>开始时间</span>
+      <label class="yh-field"><span class="yh-label">项目 / 客户（可选）</span>
+        <input id="f-project" type="text" maxlength="100" list="project-names" autocomplete="off">
+      </label>
+      <%- include('project-list') %>
+      <label class="yh-field"><span class="yh-label">开始时间</span>
         <input id="f-start" type="datetime-local" required>
       </label>
-      <label class="field"><span>结束时间（可选）</span>
+      <label class="yh-field"><span class="yh-label">结束时间（可选）</span>
         <input id="f-end" type="datetime-local">
       </label>
-      <label class="field"><span>地点（可选）</span>
+      <label class="yh-field"><span class="yh-label">地点（可选）</span>
         <input id="f-location" type="text" maxlength="200">
       </label>
-      <div class="field">
-        <span id="people-label">参与人</span>
+      <label class="yh-field"><span class="yh-label">主持人（可选）</span>
+        <input id="f-host" type="text" maxlength="50">
+      </label>
+      <div class="yh-field">
+        <span class="yh-label" id="people-label">参与人（能看到这场会）</span>
         <button class="pick" id="f-people" type="button" aria-labelledby="people-label f-people-name"><span class="pick-text" id="f-people-name">只有我</span><span aria-hidden="true">›</span></button>
       </div>
-      <label class="field"><span>议程</span>
-        <textarea id="f-agenda" rows="4" maxlength="5000"></textarea>
+      <label class="yh-field"><span class="yh-label">记录中的参会人（可选，逗号分隔，只做记录）</span>
+        <input id="f-names" type="text" maxlength="500">
+      </label>
+      <label class="yh-field"><span class="yh-label">议程</span>
+        <textarea id="f-agenda" rows="3" maxlength="5000"></textarea>
       </label>
     </div>
-    <footer class="sheet-foot">
-      <button class="btn primary wide" id="sheet-save" type="submit">保存</button>
+    <footer class="yh-sheet-foot">
+      <button class="yh-btn" id="sheet-save" type="submit">保存</button>
     </footer>
   </form>
 </dialog>
 
-<dialog class="sheet" id="picker" aria-labelledby="picker-title">
-  <div class="sheet-box">
-    <header class="sheet-head">
-      <h2 id="picker-title">选参与人</h2>
-      <button class="icon" type="button" data-close aria-label="关闭">×</button>
-    </header>
-    <div class="sheet-body">
-      <input id="picker-q" type="search" placeholder="搜姓名或部门" aria-label="搜姓名或部门">
-      <p class="note-line" id="picker-msg" hidden></p>
-      <ul class="people" id="picker-list"></ul>
-    </div>
-    <footer class="sheet-foot">
-      <button class="btn primary wide" id="picker-done" type="button">完成</button>
-    </footer>
-  </div>
-</dialog>
+<%- include('picker') %>

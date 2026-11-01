@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildPrompt, extractJson, extractNotes, normalizeSummary } from '../src/extract.js'
+import { buildPrompt, extractJson, extractNotes, normalizeHeldAt, normalizeMeta, normalizeSummary, shortSummary } from '../src/extract.js'
 import { searchTerms, todoLine } from '../src/meetings.js'
 
 const DATE = '2026-10-30'
@@ -9,17 +9,17 @@ const opts = (reply, extra = {}) => ({ llm: async () => ({ choices: [{ message: 
 
 test('提炼：正常 JSON', async () => {
   const r = await extractNotes('记录', opts(JSON.stringify(GOOD)))
-  assert.deepEqual(r, { ok: true, summary: GOOD })
+  assert.deepEqual([r.ok, r.summary], [true, GOOD])
 })
 
 test('提炼：回复包在 ```json 代码块里', async () => {
   const r = await extractNotes('记录', opts('好的，结果如下：\n```json\n' + JSON.stringify(GOOD, null, 2) + '\n```\n以上。'))
-  assert.deepEqual(r, { ok: true, summary: GOOD })
+  assert.deepEqual([r.ok, r.summary], [true, GOOD])
 })
 
 test('提炼：回复带思考过程，里面的花括号不干扰', async () => {
   const r = await extractNotes('记录', opts(`<think>格式是 {decisions: ...} 对吧</think>${JSON.stringify(GOOD)}`))
-  assert.deepEqual(r, { ok: true, summary: GOOD })
+  assert.deepEqual([r.ok, r.summary], [true, GOOD])
 })
 
 test('提炼：回复是垃圾，不抛错，给一句说明', async () => {
@@ -127,4 +127,68 @@ test('搜索词：全是标点按原文，空的返回空', () => {
   assert.deepEqual(searchTerms('，。'), ['，。'])
   assert.deepEqual(searchTerms('   '), [])
   assert.deepEqual(searchTerms(null), [])
+})
+
+// ---------- 元信息 ----------
+test('元信息：完整收敛', () => {
+  const meta = normalizeMeta({ title: ' Q4 周会 ', held_at: '2026-10-28T14:00', location: '三楼', host: '李总', attendees: ['李总', ' 王芳 ', '王芳', '', 3], project: '华东', summary: '一句。' }, DATE)
+  assert.deepEqual(meta, { title: 'Q4 周会', held_at: '2026-10-28T14:00', location: '三楼', host: '李总', attendees: ['李总', '王芳'], project: '华东', summary: '一句。' })
+})
+
+test('元信息：字符串 null、空白、错类型都当没识别出来', () => {
+  const meta = normalizeMeta({ title: 'null', host: '  ', location: 5, attendees: '王芳', project: ['x'], summary: {}, held_at: 20261028 }, DATE)
+  assert.equal(meta, null)
+  assert.equal(normalizeMeta(null, DATE), null)
+  assert.equal(normalizeMeta([], DATE), null)
+})
+
+test('元信息：超长截断', () => {
+  const meta = normalizeMeta({ title: '长'.repeat(300), project: '项'.repeat(300), host: '人'.repeat(100), attendees: ['名'.repeat(100)] }, DATE)
+  assert.deepEqual([meta.title.length, meta.project.length, meta.host.length, meta.attendees[0].length], [200, 100, 50, 50])
+})
+
+test('开会时间：格式归一，日期没写时间用 09:00', () => {
+  assert.equal(normalizeHeldAt('2026-10-28T14:00', DATE), '2026-10-28T14:00')
+  assert.equal(normalizeHeldAt('2026-10-28 14:00:30', DATE), '2026-10-28T14:00')
+  assert.equal(normalizeHeldAt('2026-10-28', DATE), '2026-10-28T09:00')
+})
+
+test('开会时间：不存在的日期、离谱的年份、自然语言都不要', () => {
+  for (const v of ['2026-02-30T10:00', '1999-01-01T10:00', '2099-01-01T10:00', '上周三', '', null, 123]) assert.equal(normalizeHeldAt(v, DATE), null, String(v))
+})
+
+test('摘要：最多三句，中英文都算', () => {
+  assert.equal(shortSummary('一。二！三？四。五。'), '一。二！三？')
+  assert.equal(shortSummary('One. Two. Three. Four.'), 'One. Two. Three.')
+  assert.equal(shortSummary('增长 3.5%，符合预期'), '增长 3.5%，符合预期')
+  assert.equal(shortSummary(null), null)
+  assert.ok(shortSummary('长'.repeat(5000)).length <= 1000)
+})
+
+test('待办：due_date 和旧的 due 都认', () => {
+  const r = normalizeSummary({ todos: [{ title: 'a', due_date: '2026-11-02' }, { title: 'b', due: '2026-11-03' }] }, DATE)
+  assert.deepEqual(r.todos.map((t) => t.due), ['2026-11-02', '2026-11-03'])
+})
+
+test('提炼：有四块没元信息也算成功', async () => {
+  const r = await extractNotes('记录', opts(JSON.stringify(GOOD)))
+  assert.equal(r.ok, true)
+  assert.equal(r.meta, null)
+})
+
+test('提炼：只有元信息算部分结果，meta 带回去', async () => {
+  const r = await extractNotes('记录', opts(JSON.stringify({ title: '周会', project: '华东' })))
+  assert.deepEqual([r.ok, r.reason, r.meta.title], [false, 'partial', '周会'])
+  assert.match(r.message, /可手动填写/)
+})
+
+test('提炼失败的提示都带「自动整理失败，可手动填写」', async () => {
+  const replies = [opts('垃圾'), opts('', { llm: null }), opts('', { llm: async () => { throw new Error('x') } }), opts('', { llm: () => new Promise(() => {}), timeoutMs: 10 })]
+  for (const o of replies) assert.match((await extractNotes('记录', o)).message, /自动整理失败，可手动填写/)
+})
+
+test('提示词：摘要语言按设置，默认中文', () => {
+  assert.match(buildPrompt({ title: 't', date: DATE, tz: 'Asia/Shanghai', lang: 'en' }), /write in English/)
+  assert.match(buildPrompt({ title: 't', date: DATE, tz: 'Asia/Shanghai' }), /summary：会议摘要，3 句话以内，用中文写/)
+  for (const f of ['held_at', 'attendees', 'host', 'project', 'summary', 'due_date']) assert.match(buildPrompt({ title: 't', date: DATE, tz: 'x' }), new RegExp(f))
 })

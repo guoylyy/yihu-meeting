@@ -11,7 +11,7 @@ async function api(method, url, body, extra = {}) {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
-    ...extra
+    ...extra // 上传文件时 extra 带自己的 body 和 headers
   }).catch(() => { throw new Error('网络不太好，稍后再试') })
   // 登录过期：刷新页面，由服务端重新走授权
   if (r.status === 401) { location.reload(); throw new Error('登录已过期') }
@@ -29,7 +29,7 @@ function toast(text) {
   el.textContent = text
   el.hidden = false
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { el.hidden = true }, 2500)
+  toastTimer = setTimeout(() => { el.hidden = true }, 2400)
 }
 
 /** 二次确认。原生 confirm 在钉钉、微信内置浏览器里不一定弹，用自己的弹层 */
@@ -38,7 +38,7 @@ function ask({ title, text, yes, danger = false }) {
   $('confirm-title').textContent = title
   $('confirm-text').textContent = text
   $('confirm-yes').textContent = yes
-  $('confirm-yes').classList.toggle('danger', danger)
+  $('confirm-yes').classList.toggle('yh-btn--danger', danger)
   return new Promise((resolve) => {
     d.addEventListener('close', () => resolve(d.returnValue === 'yes'), { once: true })
     d.returnValue = ''
@@ -48,20 +48,70 @@ function ask({ title, text, yes, danger = false }) {
 $('confirm-no').addEventListener('click', () => $('confirm').close('no'))
 $('confirm-yes').addEventListener('click', () => $('confirm').close('yes'))
 
+// ---------- 顶栏菜单、重试 ----------
+const menu = $('user-menu')
+document.addEventListener('click', (e) => {
+  if (menu.open && !menu.contains(e.target)) menu.open = false
+  if (e.target.closest('[data-reload]')) location.reload()
+})
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.open = false })
+
 // ---------- 列表 ----------
 const listEl = $('list')
 const searchEl = $('search')
+const projectEl = $('project-filter')
 let view = document.querySelector('.tab.on')?.dataset.view || 'recent'
+
+function showListError(message) {
+  const box = document.createElement('div')
+  box.className = 'yh-error'
+  const p = document.createElement('p')
+  p.textContent = message
+  const retry = document.createElement('button')
+  retry.className = 'yh-btn yh-btn--ghost'
+  retry.type = 'button'
+  retry.textContent = '重试'
+  retry.addEventListener('click', () => loadList())
+  box.append(p, retry)
+  listEl.replaceChildren(box)
+}
 
 let listSeq = 0
 async function loadList() {
   const seq = ++listSeq
   const q = searchEl.value.trim()
-  const query = `view=${view}${q ? `&q=${encodeURIComponent(q)}` : ''}`
-  const html = await api('GET', `api/list.html?${query}`)
-  if (seq !== listSeq) return // 连续输入时，只认最后一次
-  listEl.innerHTML = html
-  history.replaceState(null, '', `?${query}`)
+  const project = projectEl.value
+  const query = `view=${view}${q ? `&q=${encodeURIComponent(q)}` : ''}${project ? `&project=${encodeURIComponent(project)}` : ''}`
+  try {
+    const html = await api('GET', `api/list.html?${query}`)
+    if (seq !== listSeq) return // 连续输入时，只认最后一次
+    listEl.innerHTML = html
+    history.replaceState(null, '', `?${query}`)
+  } catch (err) {
+    if (seq === listSeq) showListError(err.message)
+  }
+}
+
+projectEl?.addEventListener('change', () => loadList())
+
+// 右栏的项目：等于下拉选中它，切到全部
+document.querySelector('.side')?.addEventListener('click', (e) => {
+  const link = e.target.closest('[data-project]')
+  if (!link) return
+  e.preventDefault()
+  projectEl.value = link.dataset.project
+  view = 'all'
+  syncTabs()
+  loadList()
+})
+
+function syncTabs() {
+  for (const t of document.querySelectorAll('.tab')) {
+    const on = t.dataset.view === view
+    t.classList.toggle('on', on)
+    if (on) t.setAttribute('aria-current', 'page')
+    else t.removeAttribute('aria-current')
+  }
 }
 
 document.querySelector('.tabs')?.addEventListener('click', (e) => {
@@ -70,19 +120,14 @@ document.querySelector('.tabs')?.addEventListener('click', (e) => {
   e.preventDefault()
   view = a.dataset.view
   searchEl.value = ''
-  for (const t of document.querySelectorAll('.tab')) {
-    const on = t === a
-    t.classList.toggle('on', on)
-    if (on) t.setAttribute('aria-current', 'page')
-    else t.removeAttribute('aria-current')
-  }
-  loadList().catch((err) => toast(err.message))
+  syncTabs()
+  loadList()
 })
 
 let searchTimer
 const searchSoon = () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => loadList().catch((err) => toast(err.message)), 250)
+  searchTimer = setTimeout(() => loadList(), 250)
 }
 // 拼音输入过程中不搜，选完字才搜
 searchEl?.addEventListener('input', (e) => { if (!e.isComposing) searchSoon() })
@@ -100,15 +145,21 @@ function showPeople() {
   $('f-people-name').textContent = chosen.size ? [...chosen.values()].join('、') : '只有我'
 }
 
+const splitNames = (s) => s.split(/[,，、;；\n]+/).map((n) => n.trim()).filter(Boolean)
+const formDefaults = () => JSON.parse($('meeting-form')?.dataset.defaults || '[]')
+
 function openForm(m) {
   editingId = m?.id ?? null
   $('sheet-title').textContent = m ? '编辑会议' : '新建会议'
   $('f-title').value = m?.title ?? ''
+  $('f-project').value = m?.project ?? ''
+  $('f-host').value = m?.host ?? ''
+  $('f-names').value = (m?.attendee_names ?? []).join('、')
   $('f-start').value = m?.starts_at ?? nextSlot()
   $('f-end').value = m?.ends_at ?? ''
   $('f-location').value = m?.location ?? ''
   $('f-agenda').value = m?.agenda ?? ''
-  chosen = new Map((m?.attendees ?? []).map((a) => [a.id, a.name]))
+  chosen = new Map((m?.attendees ?? formDefaults()).map((a) => [a.id, a.name]))
   showPeople()
   sheet.showModal()
 }
@@ -121,6 +172,9 @@ $('meeting-form')?.addEventListener('submit', async (e) => {
   btn.disabled = true
   const fields = {
     title: $('f-title').value,
+    project: $('f-project').value,
+    host: $('f-host').value,
+    attendee_names: splitNames($('f-names').value),
     starts_at: $('f-start').value,
     ends_at: $('f-end').value || null,
     location: $('f-location').value,
@@ -207,6 +261,7 @@ $('picker-list')?.addEventListener('click', (e) => {
 $('picker-done')?.addEventListener('click', () => {
   showPeople()
   picker.close()
+  window.onPeoplePicked?.()
 })
 
 // 键盘弹起时可视区变矮，弹层跟着留在键盘上方

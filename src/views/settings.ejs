@@ -1,0 +1,37 @@
+<%- include('layout/head') %>
+<main class="yh-app">
+  <a class="back" href="./"><span aria-hidden="true">‹</span>会议</a>
+  <div class="yh-page-head">
+    <h1>设置</h1>
+    <p class="yh-sub">改完立即生效，只影响你自己。</p>
+  </div>
+
+  <section class="yh-card settings-group">
+    <h2 class="section-title">AI 通道</h2>
+    <dl class="info">
+      <div><dt>当前模型</dt><dd id="s-model"><%= model %></dd></div>
+    </dl>
+    <p class="yh-hint" id="s-model-hint"><%= hosted ? '由平台统一配置，这里不能改。' : '本地单人模式没接平台，AI 不可用。' %></p>
+  </section>
+
+  <section class="yh-card settings-group" id="settings" data-defaults="<%= JSON.stringify(defaults) %>">
+    <h2 class="section-title">默认值</h2>
+    <div class="yh-field">
+      <span class="yh-label" id="people-label">默认参与人</span>
+      <button class="pick" id="f-people" type="button" aria-labelledby="people-label f-people-name"><span class="pick-text" id="f-people-name">只有我</span><span aria-hidden="true">›</span></button>
+      <p class="yh-hint">新建和导入的会议自动带上这些人，他们能看到纪要。</p>
+    </div>
+    <label class="yh-field"><span class="yh-label">摘要语言</span>
+      <span class="yh-select"><select id="s-lang">
+        <% for (const [code, label] of langs) { %><option value="<%= code %>"<%= code === cfg.summary_lang ? ' selected' : '' %>><%= label %></option><% } %>
+      </select></span>
+    </label>
+    <label class="yh-field"><span class="yh-label">待办默认截止天数</span>
+      <input id="s-days" type="number" inputmode="numeric" min="0" max="<%= dueMax %>" value="<%= cfg.todo_due_days %>">
+      <span class="yh-hint">没写截止日的待办，从开会日起算。0 表示不设。</span>
+      <span class="yh-field-error" id="s-days-error" hidden></span>
+    </label>
+  </section>
+</main>
+<%- include('partials/picker') %>
+<%- include('layout/foot') %>

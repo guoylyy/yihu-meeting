@@ -6,7 +6,7 @@ export const BLOCKS = [['decision', '决议'], ['todo', '待办'], ['risk', '风
 
 export function card(m, today, now = new Date()) {
   const status = meetingStatus(m.starts_at, m.ends_at, now)
-  return { id: m.id, title: m.title, when: whenLabel(m.starts_at, today), status, status_label: STATUS_LABEL[status], people: Number(m.people), has_note: !!m.has_note }
+  return { id: m.id, title: m.title, when: whenLabel(m.starts_at, today), status, status_label: STATUS_LABEL[status], people: Number(m.people), has_note: !!m.has_note, project: m.project || '' }
 }
 
 export function detail(m, me, names, today, now = new Date()) {
@@ -22,6 +22,11 @@ export function detail(m, me, names, today, now = new Date()) {
     ends_at: m.ends_at ? toLocal(m.ends_at) : '',
     location: m.location || '',
     agenda: m.agenda || '',
+    project: m.project || '',
+    host: m.host || '',
+    summary: m.summary || '',
+    attendee_names: m.attendee_names || [],
+    source_name: m.source_name || '',
     mine: m.owner_id === me.id,
     owner: { id: m.owner_id, name: nameOf(m.owner_id) },
     attendees: m.attendee_ids.map((id) => ({ id, name: nameOf(id) })),

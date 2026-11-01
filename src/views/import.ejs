@@ -1,0 +1,49 @@
+<%- include('layout/head') %>
+<main class="yh-app">
+  <a class="back" href="./"><span aria-hidden="true">‹</span>会议</a>
+  <div class="yh-page-head">
+    <h1>导入会议记录</h1>
+    <p class="yh-sub">上传文件或粘贴文字，AI 自动识别成一场会议，项目可以直接改。</p>
+  </div>
+
+  <div class="import-grid">
+    <section class="yh-card">
+      <h2 class="section-title">上传文件</h2>
+      <input class="file-input" id="file-input" type="file" multiple accept="<%= accept %>,.png,.jpg,.jpeg" aria-label="选择文件">
+      <label class="drop" id="drop" for="file-input">
+        <strong>选择文件，或拖到这里</strong>
+      </label>
+    </section>
+    <div class="import-note">
+      <span class="note-line">支持 .docx / .pdf / .txt / .md，单文件 ≤10MB，一次最多 <%= filesMax %> 个</span>
+      <button class="yh-btn yh-btn--text import-why" id="image-help-btn" type="button" aria-haspopup="dialog">图片怎么不支持？</button>
+    </div>
+    <section class="yh-card">
+      <form id="paste-form">
+        <label class="yh-field"><span class="yh-label section-title">粘贴文字</span>
+          <textarea id="paste-text" rows="4" maxlength="50000" placeholder="把会议记录粘到这里"></textarea>
+        </label>
+        <div class="paste-foot">
+          <span class="note-line">最多 5 万字</span>
+          <button class="yh-btn" id="paste-btn" type="submit">整理这段文字</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <ul class="bare results" id="results" aria-live="polite"></ul>
+  <%- include('partials/project-list') %>
+</main>
+
+<dialog class="yh-sheet yh-sheet--auto" id="image-help" aria-labelledby="image-help-title">
+  <div class="yh-sheet-box">
+    <header class="yh-sheet-head">
+      <h2 id="image-help-title">图片怎么不支持？</h2>
+      <button class="yh-btn yh-btn--text" type="button" data-close aria-label="关闭">×</button>
+    </header>
+    <div class="yh-sheet-body">
+      <p>图片识别暂未开通，请先把图片内容转成文字再粘进来。</p>
+    </div>
+  </div>
+</dialog>
+<%- include('layout/foot') %>

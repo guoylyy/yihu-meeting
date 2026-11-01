@@ -35,12 +35,28 @@ const TABLES = [
     source ENUM('ai','manual') NOT NULL DEFAULT 'ai',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_meeting_kind (meeting_id, kind)
+  ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+  `CREATE TABLE IF NOT EXISTS meeting_setting (
+    user_id INT NOT NULL PRIMARY KEY,
+    default_attendee_ids JSON NULL,
+    summary_lang VARCHAR(5) NOT NULL DEFAULT 'zh',
+    todo_due_days INT NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
   ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`
 ]
 
 // 建表之后新增的列登记在这里：{ table, column, ddl }，ddl 是 ADD COLUMN 后面那段定义
 // 回滚只回代码不回库，新列要可空或有默认值
-export const ADDED_COLUMNS = []
+export const ADDED_COLUMNS = [
+  { table: 'meeting', column: 'project', ddl: 'VARCHAR(100) NULL' },
+  { table: 'meeting', column: 'host', ddl: 'VARCHAR(50) NULL' },
+  { table: 'meeting', column: 'summary', ddl: 'TEXT NULL' },
+  // 记录里写的参会人姓名，不是平台用户：能不能看这场会只由 meeting_attendee 决定，模型输出不能给人授权
+  { table: 'meeting', column: 'attendee_names', ddl: 'JSON NULL' },
+  { table: 'meeting', column: 'source_name', ddl: 'VARCHAR(255) NULL' },
+  // 开会时间只有 starts_at 一份，held_at 是它的别名（虚拟列，不占存储，不会两边不一致）
+  { table: 'meeting', column: 'held_at', ddl: 'DATETIME GENERATED ALWAYS AS (starts_at) VIRTUAL' }
+]
 
 /** 所有时间按 UTC 进出库；DATE 保持字符串，避免被驱动按时区挪一天 */
 export function createPool(url) {

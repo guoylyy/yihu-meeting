@@ -1,4 +1,4 @@
-// 门槛 5：用真实平台模型提炼一段会议记录，打印模型原始回复和收敛后的四块。凭证只从环境变量读，不打印
+// 门槛 5：用真实平台模型提炼一段会议记录，打印模型原始回复、收敛后的元信息和四块。凭证只从环境变量读，不打印
 //   YH_CLIENT_ID=… YH_CLIENT_SECRET=… YH_API_URL=<平台地址> node scripts/real-model.mjs
 import { Workspace } from '../src/yh-one.mjs'
 import { extractNotes } from '../src/extract.js'
@@ -33,6 +33,7 @@ const out = await extractNotes(NOTES, { llm, title: 'Q4 华东渠道推进会', 
 console.log(`会议日期：${date}  模型：${model}  耗时：${Date.now() - started}ms`)
 console.log('--- 会议记录\n' + NOTES)
 console.log('--- 模型原始回复\n' + raw)
+console.log('--- 收敛后的元信息\n' + JSON.stringify(out.meta, null, 2))
 console.log('--- 收敛后的四块\n' + JSON.stringify(out.summary ?? out, null, 2))
 if (out.ok) console.log('--- 复制成一行\n' + out.summary.todos.map((t) => todoLine({ text: t.title, owner_name: t.owner, due_date: t.due })).join('\n'))
 process.exit(out.ok ? 0 : 1)

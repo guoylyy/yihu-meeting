@@ -1,20 +1,26 @@
 <% const any = groups.some((g) => g.list.length) %>
 <% if (!any) { %>
-  <p class="empty"><%= q ? '没有找到相关会议。' : '还没有会议。' %></p>
+  <div class="yh-empty">
+    <p><%= q || project ? '没有找到相关会议。' : '还没有会议。' %></p>
+    <% if (!q && !project) { %><a class="yh-btn" href="import">导入会议记录</a><% } %>
+  </div>
 <% } else { %>
   <% for (const g of groups) { %>
     <% if (g.list.length) { %>
       <% if (g.title) { %><h2 class="group"><%= g.title %></h2><% } %>
-      <ul class="list" data-group="<%= g.key %>">
+      <ul class="bare" data-group="<%= g.key %>">
         <% for (const m of g.list) { %>
           <li class="meeting" data-id="<%= m.id %>">
-            <a class="row" href="meetings/<%= m.id %>">
-              <span class="title" title="<%= m.title %>"><%= m.title %></span>
-              <span class="meta">
+            <a class="yh-row" href="meetings/<%= m.id %>">
+              <span class="yh-row-main">
+                <span class="yh-row-title" title="<%= m.title %>"><%= m.title %></span>
+                <span class="yh-row-status status <%= m.status %>"><%= m.status_label %></span>
+              </span>
+              <span class="yh-row-sub">
                 <span class="when"><%= m.when %></span>
+                <% if (m.project) { %><span class="project"><%= m.project %></span><% } %>
                 <span><%= m.people %> 人</span>
-                <span class="status <%= m.status %>"><%= m.status_label %></span>
-                <% if (m.has_note) { %><span class="tag">纪要</span><% } %>
+                <% if (m.has_note) { %><span class="yh-tag">纪要</span><% } %>
               </span>
             </a>
           </li>

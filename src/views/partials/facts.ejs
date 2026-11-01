@@ -1,0 +1,16 @@
+<div class="facts">
+  <% if (meeting.project) { %><span class="yh-tag" id="m-project"><%= meeting.project %></span><% } %>
+  <% if (meeting.host) { %><span class="chip" id="m-host">主持：<%= meeting.host %></span><% } %>
+  <ul class="bare people-chips" aria-label="参与人" id="m-people">
+    <li class="chip"><%= meeting.owner.name %>（创建者）</li>
+    <% for (const a of meeting.attendees) { %><li class="chip"><%= a.name %></li><% } %>
+  </ul>
+  <% if (meeting.attendee_names.length) { %><span class="label" id="m-names">记录中的参会人：<%= meeting.attendee_names.join('、') %></span><% } %>
+  <% if (meeting.source_name) { %><span class="label" id="m-source">来源：<%= meeting.source_name %></span><% } %>
+</div>
+<% if (meeting.summary) { %>
+  <section class="yh-card summary-box" id="m-summary">
+    <h2 class="section-title">摘要</h2>
+    <p class="plain"><%= meeting.summary %></p>
+  </section>
+<% } %>

@@ -32,7 +32,7 @@ export function buildTools({ meetings }) {
     {
       name: 'get_meeting_notes',
       title: '查看会议纪要',
-      description: '按会议 id 取纪要的四块结果：决议、待办、风险、下次议题。用户问「上次会定了什么」「会上给我派了什么活」时，先用 list_meetings 找到 id 再调这个。只能看用户创建或参与的会议。',
+      description: '按会议 id 取纪要的摘要和四块结果：决议、待办、风险、下次议题。用户问「上次会定了什么」「会上给我派了什么活」时，先用 list_meetings 找到 id 再调这个。只能看用户创建或参与的会议。',
       inputSchema: {
         type: 'object',
         properties: {
@@ -44,7 +44,7 @@ export function buildTools({ meetings }) {
       run: async (user, args) => {
         const m = await meetings.get(user.id, args.id)
         const rows = await meetings.items(user.id, args.id)
-        return { id: m.id, title: m.title, time: rangeLabel(m.starts_at, m.ends_at, todayIn()), ...summaryOf(rows) }
+        return { id: m.id, title: m.title, time: rangeLabel(m.starts_at, m.ends_at, todayIn()), project: m.project, summary: m.summary, ...summaryOf(rows) }
       }
     }
   ]

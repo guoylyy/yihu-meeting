@@ -1,27 +1,78 @@
 <%- include('layout/head') %>
-<main class="page">
-  <header class="top">
-    <h1>会议与纪要</h1>
-    <% if (version) { %><span class="ver" id="version">v<%= version %></span><% } %>
-  </header>
+<main class="yh-app yh-app--wide">
+  <div class="yh-page-head head-row">
+    <div>
+      <h1>我的会议</h1>
+      <p class="yh-sub">记会议、导入纪要，AI 帮你整理决议和待办。</p>
+    </div>
+    <% if (!problem) { %>
+      <div class="head-actions">
+        <a class="yh-btn" id="import-btn" href="import">导入</a>
+        <button class="yh-btn yh-btn--ghost" id="new-btn" type="button">新建</button>
+      </div>
+    <% } %>
+  </div>
 
   <% if (problem) { %>
-    <p class="empty"><%= problem %></p>
+    <div class="yh-error">
+      <p><%= problem %></p>
+      <button class="yh-btn yh-btn--ghost" type="button" data-reload>重试</button>
+    </div>
   <% } else { %>
-    <nav class="tabs" aria-label="视图">
-      <% for (const [key, label] of tabs) { %>
-        <a class="tab<%= key === view ? ' on' : '' %>" href="?view=<%= key %>" data-view="<%= key %>"<%- key === view ? ' aria-current="page"' : '' %>><%= label %></a>
-      <% } %>
-    </nav>
+    <div class="split split--rail">
+      <section>
+        <div class="filters">
+          <nav class="tabs" aria-label="视图">
+            <% for (const [key, label] of tabs) { %>
+              <a class="tab<%= key === view ? ' on' : '' %>" href="?view=<%= key %>" data-view="<%= key %>"<%- key === view ? ' aria-current="page"' : '' %>><%= label %></a>
+            <% } %>
+          </nav>
+          <label class="yh-field"><span class="sr-only">项目</span>
+            <span class="yh-select"><select id="project-filter" aria-label="项目">
+              <option value="">全部项目</option>
+              <% for (const p of projects) { %><option value="<%= p.name %>"<%= p.name === project ? ' selected' : '' %>><%= p.name %></option><% } %>
+            </select></span>
+          </label>
+          <label class="yh-field"><span class="sr-only">搜标题或纪要</span>
+            <input id="search" type="search" value="<%= q %>" maxlength="100" placeholder="搜标题或纪要" aria-label="搜标题或纪要" enterkeyhint="search">
+          </label>
+        </div>
+        <section id="list"><%- include('partials/list') %></section>
+      </section>
 
-    <input class="search" id="search" type="search" value="<%= q %>" maxlength="100" placeholder="搜标题或纪要" aria-label="搜标题或纪要" enterkeyhint="search">
-
-    <section id="list"><%- include('partials/list') %></section>
+      <aside class="side" aria-label="本月概览">
+        <section>
+          <h2>本月</h2>
+          <div class="stats">
+            <div class="yh-stat"><b id="stat-meetings"><%= rail.stats.meetings %></b><span>场会议</span></div>
+            <div class="yh-stat"><b id="stat-todos"><%= rail.stats.todos %></b><span>条待办</span></div>
+            <div class="yh-stat"><b id="stat-projects"><%= rail.stats.projects %></b><span>个项目</span></div>
+          </div>
+        </section>
+        <% if (projects.length) { %>
+          <section>
+            <h2>项目</h2>
+            <ul class="bare">
+              <% for (const p of projects.slice(0, railProjects)) { %>
+                <li><a class="side-link" href="?view=all&project=<%= encodeURIComponent(p.name) %>" data-project="<%= p.name %>"><span><%= p.name %></span><span class="count"><%= p.count %> 场</span></a></li>
+              <% } %>
+            </ul>
+          </section>
+        <% } %>
+        <% if (rail.recent.length) { %>
+          <section>
+            <h2>最近会议</h2>
+            <ul class="bare">
+              <% for (const m of rail.recent) { %>
+                <li><a class="side-link" href="meetings/<%= m.id %>"><span><%= m.title %></span><span class="count"><%= m.when.split(' ')[0] %></span></a></li>
+              <% } %>
+            </ul>
+          </section>
+        <% } %>
+      </aside>
+    </div>
   <% } %>
 </main>
 
-<% if (!problem) { %>
-  <button class="fab" id="new-btn" type="button">+ 新建</button>
-  <%- include('partials/form') %>
-<% } %>
+<% if (!problem) { %><%- include('partials/form') %><% } %>
 <%- include('layout/foot') %>

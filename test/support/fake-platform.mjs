@@ -13,6 +13,8 @@ export function startFakePlatform({ port = 0, appTarget = null, prefix = '/apps/
   const state = {
     llm: () => JSON.stringify({ decisions: [], todos: [], risks: [], nextAgenda: [] }),
     usersDown: false,
+    rejectKey: false,
+    models: [{ id: 'qwen-max', object: 'model', name: '通义千问 Max', default: true }],
     notifications: [],
     events: [],
     loginAs: 11
@@ -62,7 +64,16 @@ export function startFakePlatform({ port = 0, appTarget = null, prefix = '/apps/
       const list = PEOPLE.filter((p) => p.active)
       return json(res, 200, { code: 0, data: { total: list.length, list } })
     }
+    if (url.pathname === '/api/open/llm/models') {
+      if (!state.models) return json(res, 503, { error: { message: '模型不可用' } })
+      return json(res, 200, { object: 'list', data: state.models })
+    }
+    if (url.pathname === '/logout') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+      return res.end(`平台已退出 ${url.search}`)
+    }
     if (url.pathname === '/api/open/llm/chat/completions') {
+      if (state.rejectKey) return json(res, 401, { error: { message: 'client_secret 无效' } })
       const content = await state.llm(JSON.parse(await readBody(req)))
       if (content === undefined) return json(res, 503, { error: { message: '模型不可用' } })
       return json(res, 200, { choices: [{ message: { role: 'assistant', content } }] })

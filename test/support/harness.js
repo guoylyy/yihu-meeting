@@ -5,7 +5,7 @@ import { createPool, ensureSchema } from '../../src/db.js'
 import { startFakePlatform } from './fake-platform.mjs'
 
 export async function clearTables(pool) {
-  for (const t of ['meeting_item', 'meeting_note', 'meeting_attendee', 'meeting']) await pool.query(`DELETE FROM ${t}`)
+  for (const t of ['meeting_item', 'meeting_note', 'meeting_attendee', 'meeting', 'meeting_setting']) await pool.query(`DELETE FROM ${t}`)
 }
 
 export async function startHarness({ aiTimeoutMs = 300, keepData = false } = {}) {
@@ -47,6 +47,10 @@ export async function startHarness({ aiTimeoutMs = 300, keepData = false } = {})
     return {
       get: (p, headers) => call('GET', p, undefined, headers),
       post: (p, b = {}) => call('POST', p, b),
+      upload: async (name, bytes) => {
+        const r = await fetch(`${base}/api/import/file?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { cookie, 'Content-Type': 'application/octet-stream' }, body: bytes })
+        return { status: r.status, json: await r.json().catch(() => null) }
+      },
       put: (p, b = {}) => call('PUT', p, b),
       patch: (p, b = {}) => call('PATCH', p, b),
       del: (p) => call('DELETE', p)

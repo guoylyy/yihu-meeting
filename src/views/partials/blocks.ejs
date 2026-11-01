@@ -1,10 +1,9 @@
 <% for (const b of blocks) { %>
-  <section class="block" data-kind="<%= b.kind %>">
+  <section class="yh-card block" data-kind="<%= b.kind %>">
     <div class="block-head">
       <h2 id="block-<%= b.kind %>"><%= b.label %><% if (b.items.length) { %> · <%= b.items.length %><% } %></h2>
-      <% if (mine) { %><button class="mini" type="button" data-toggle aria-expanded="false" aria-controls="add-<%= b.kind %>" aria-describedby="block-<%= b.kind %>">添加</button><% } %>
+      <% if (mine) { %><button class="yh-btn yh-btn--text" type="button" data-toggle aria-expanded="false" aria-controls="add-<%= b.kind %>" aria-describedby="block-<%= b.kind %>">添加</button><% } %>
     </div>
-    <% if (b.kind === 'todo' && b.items.length) { %><p class="note-line">点「复制」后，粘到「收件箱」的快速录入即可。</p><% } %>
     <% if (b.items.length) { %>
       <ul class="items">
         <% for (const i of b.items) { %>
@@ -12,26 +11,31 @@
             <div class="item-main">
               <span class="item-text"><%= i.text %></span>
               <% if (i.owner || i.due) { %>
-                <span class="meta">
-                  <% if (i.owner) { %><span>@<%= i.owner %></span><% } %>
-                  <% if (i.due) { %><span><%= i.due_label %></span><% } %>
+                <span class="item-meta">
+                  <% if (i.owner) { %><span class="item-owner">@<%= i.owner %></span><% } %>
+                  <% if (i.due) { %><span class="item-due"><%= i.due_label %></span><% } %>
                 </span>
               <% } %>
             </div>
-            <% if (i.line) { %><button class="mini" type="button" data-copy="<%= i.line %>">复制</button><% } %>
-            <% if (mine) { %><button class="icon" type="button" data-del aria-label="删除：<%= i.text %>">×</button><% } %>
+            <% if (mine && b.kind === 'todo') { %>
+              <button class="yh-btn yh-btn--text item-btn" type="button" data-assign data-owner="<%= i.owner || '' %>" data-due="<%= i.due || '' %>" data-text="<%= i.text %>">指派</button>
+              <button class="yh-btn yh-btn--text item-btn" type="button" data-more data-line="<%= i.line %>" data-text="<%= i.text %>" aria-haspopup="dialog" aria-label="更多操作：<%= i.text %>">⋯</button>
+            <% } else { %>
+              <% if (i.line) { %><button class="yh-btn yh-btn--text item-btn" type="button" data-copy="<%= i.line %>">复制</button><% } %>
+              <% if (mine) { %><button class="yh-btn yh-btn--text item-btn" type="button" data-del aria-label="删除：<%= i.text %>">×</button><% } %>
+            <% } %>
           </li>
         <% } %>
       </ul>
     <% } %>
     <% if (mine) { %>
       <form class="add" id="add-<%= b.kind %>" autocomplete="off" hidden>
-        <input name="text" type="text" maxlength="500" placeholder="补一条<%= b.label %>" aria-label="补一条<%= b.label %>" enterkeyhint="done">
+        <input class="yh-input" name="text" type="text" maxlength="500" placeholder="补一条<%= b.label %>" aria-label="补一条<%= b.label %>" enterkeyhint="done">
         <% if (b.kind === 'todo') { %>
-          <input name="owner" type="text" maxlength="50" placeholder="负责人" aria-label="负责人">
-          <input name="due" type="date" aria-label="截止日期">
+          <input class="yh-input" name="owner" type="text" maxlength="50" placeholder="负责人" aria-label="负责人">
+          <input class="yh-input" name="due" type="date" aria-label="截止日期">
         <% } %>
-        <button class="btn" type="submit">添加</button>
+        <button class="yh-btn yh-btn--ghost" type="submit">添加</button>
       </form>
     <% } %>
   </section>

@@ -1,6 +1,8 @@
-// 详情页：纪要自动保存、AI 提炼、四块的增删和复制。参与人没有输入框，这里大部分逻辑不会跑
+// 详情页：纪要阅读 / 编辑、自动保存、AI 提炼、四块的增删和复制。参与人没有输入框，这里大部分逻辑不会跑
 const meetingId = document.body.dataset.id
 const noteEl = $('note')
+const noteView = $('note-text')
+const noteEditBtn = $('note-edit')
 const blocksEl = $('blocks')
 const stateEl = $('save-state')
 const aiMsg = $('ai-msg')
@@ -50,12 +52,30 @@ function saveOnLeave() {
   saveNote({ keepalive: size < KEEPALIVE_BYTES })
 }
 
+/** 默认读全文，点「编辑」才出输入框。还没内容时没什么可读，直接是输入框 */
+function setEditing(on) {
+  const editing = on || !noteEl.value.trim()
+  if (!editing) noteView.textContent = noteEl.value
+  noteView.hidden = editing
+  noteEl.hidden = !editing
+  noteEditBtn.textContent = editing ? '完成' : '编辑'
+}
+
 if (noteEl) {
+  setEditing(false)
+  noteEditBtn.addEventListener('click', () => {
+    const open = noteEl.hidden
+    setEditing(open)
+    if (open) noteEl.focus()
+    else saveNote()
+  })
+
   let draft = null
   try { draft = JSON.parse(localStorage.getItem(draftKey)) } catch { /* 坏数据当没有 */ }
   // 只认基于当前服务器版本写的草稿；服务器已经更新过，说明这份过期了
   if (draft && draft.base === savedAt && draft.text !== noteEl.value) {
     noteEl.value = draft.text
+    setEditing(true)
     dirty = true
     toast('已恢复上次没保存的内容')
     saveNote()
@@ -81,6 +101,10 @@ function showAiMsg(text, quiet = false) {
 
 async function reloadBlocks() {
   blocksEl.innerHTML = await api('GET', `api/meetings/${meetingId}/blocks.html`)
+}
+
+async function reloadFacts() {
+  $('facts').innerHTML = await api('GET', `api/meetings/${meetingId}/facts.html`)
 }
 
 $('extract-btn')?.addEventListener('click', async (e) => {
@@ -109,6 +133,7 @@ $('extract-btn')?.addEventListener('click', async (e) => {
       await reloadBlocks()
       if (r.count) toast(`提炼出 ${r.count} 条`)
     }
+    await reloadFacts()
   } catch (err) {
     dirty = true
     showAiMsg(err.message)
@@ -137,6 +162,17 @@ async function copyText(text) {
   }
 }
 
+async function copyLine(line) {
+  toast((await copyText(line)) ? '已复制，粘到收件箱即可' : '复制失败，长按文字手动复制')
+}
+
+async function deleteItem(id) {
+  try {
+    await api('DELETE', `api/meetings/${meetingId}/items/${id}`)
+    await reloadBlocks()
+  } catch (err) { toast(err.message) }
+}
+
 // 展开状态只在 DOM 上：重新渲染四块、刷新页面都回到收起
 function toggleAdd(block, open) {
   const form = block.querySelector('.add')
@@ -153,13 +189,13 @@ blocksEl.addEventListener('click', async (e) => {
     const block = toggle.closest('.block')
     return toggleAdd(block, block.querySelector('.add').hidden)
   }
+  const assign = e.target.closest('[data-assign]')
+  if (assign) return openAssign(assign)
+  const more = e.target.closest('[data-more]')
+  if (more) return openItemMenu(more)
   const copy = e.target.closest('[data-copy]')
-  if (copy) return toast((await copyText(copy.dataset.copy)) ? '已复制，粘到收件箱即可' : '复制失败，长按文字手动复制')
-  if (!e.target.closest('[data-del]')) return
-  try {
-    await api('DELETE', `api/meetings/${meetingId}/items/${e.target.closest('.item').dataset.id}`)
-    await reloadBlocks()
-  } catch (err) { toast(err.message) }
+  if (copy) return copyLine(copy.dataset.copy)
+  if (e.target.closest('[data-del]')) deleteItem(e.target.closest('.item').dataset.id)
 })
 
 blocksEl.addEventListener('keydown', (e) => {
@@ -180,6 +216,57 @@ blocksEl.addEventListener('submit', async (e) => {
     showAiMsg('')
     blocksEl.querySelector(`[data-kind="${kind}"] [data-toggle]`).focus()
   } catch (err) { toast(err.message) }
+})
+
+// ---------- 待办的 ⋯ 菜单 ----------
+const itemMenu = $('item-menu')
+let menuTarget = null
+
+function openItemMenu(btn) {
+  menuTarget = { id: btn.closest('.item').dataset.id, line: btn.dataset.line }
+  $('item-menu-text').textContent = btn.dataset.text
+  itemMenu.showModal()
+}
+
+itemMenu?.querySelector('[data-close]').addEventListener('click', () => itemMenu.close())
+itemMenu?.addEventListener('click', (e) => { if (e.target === itemMenu) itemMenu.close() })
+// 先关菜单：模态弹层开着时外面的元素是惰性的，复制的兜底办法选不中文字
+$('item-copy')?.addEventListener('click', () => {
+  itemMenu.close()
+  copyLine(menuTarget.line)
+})
+$('item-del')?.addEventListener('click', () => {
+  itemMenu.close()
+  deleteItem(menuTarget.id)
+})
+
+// ---------- 指派待办 ----------
+const assignSheet = $('assign')
+let assigningId = null
+
+function openAssign(btn) {
+  assigningId = btn.closest('.item').dataset.id
+  $('assign-text').textContent = btn.dataset.text
+  $('assign-owner').value = btn.dataset.owner
+  $('assign-due').value = btn.dataset.due
+  assignSheet.showModal()
+  $('assign-owner').focus()
+}
+
+assignSheet?.querySelector('[data-close]').addEventListener('click', () => assignSheet.close())
+assignSheet?.addEventListener('click', (e) => { if (e.target === assignSheet) assignSheet.close() })
+
+$('assign-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const btn = $('assign-save')
+  btn.disabled = true
+  try {
+    await api('PATCH', `api/meetings/${meetingId}/items/${assigningId}`, { owner: $('assign-owner').value, due: $('assign-due').value || null })
+    assignSheet.close()
+    await reloadBlocks()
+    toast('已指派')
+  } catch (err) { toast(err.message) }
+  btn.disabled = false
 })
 
 // ---------- 编辑、删除 ----------

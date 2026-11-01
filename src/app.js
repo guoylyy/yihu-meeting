@@ -6,9 +6,12 @@ import { VERSION } from './version.js'
 import { todayIn } from './dates.js'
 import { HttpError, createMeetings } from './meetings.js'
 import { PlatformUsersError, createPlatformUsers } from './platform-users.js'
+import { createSettings } from './settings.js'
+import { createModelInfo } from './about.js'
 import { detail } from './present.js'
 import { buildTools, mcpHandler } from './mcp.js'
 import { apiRouter } from './routes/api.js'
+import { importRouter } from './routes/import.js'
 import { pageRouter } from './routes/pages.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -18,14 +21,17 @@ const BODY_LIMIT = '256kb' // 纪要上限 5 万字，全是四字节字符也�
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next)
 const CSP = "default-src 'self'; img-src 'self' data:; base-uri 'self'; form-action 'self'; object-src 'none'"
 
-export function createApp({ ws, pool, getReady = () => !!pool, aiTimeoutMs }) {
+export function createApp({ ws, pool, getReady = () => !!pool, aiTimeoutMs, importTimeoutMs }) {
   const app = express()
   app.disable('x-powered-by')
   app.set('views', path.join(here, 'views'))
   app.set('view engine', 'ejs')
 
   const meetings = pool ? createMeetings({ pool }) : null
-  const users = createPlatformUsers({ clientId: ws.clientId, clientSecret: ws.clientSecret, apiUrl: ws.apiUrl })
+  const settings = pool ? createSettings({ pool }) : null
+  const credentials = { clientId: ws.clientId, clientSecret: ws.clientSecret, apiUrl: ws.apiUrl }
+  const users = createPlatformUsers(credentials)
+  const modelInfo = createModelInfo(credentials)
   const llm = ws.clientId && ws.clientSecret ? (opts) => ws.llm(opts) : null
   // 没配平台凭证时只有本地开发能进（单一用户）；生产环境绝不能退回匿名，否则人人都是同一个创建者
   const devMode = !ws.enabled && process.env.NODE_ENV !== 'production'
@@ -59,14 +65,16 @@ export function createApp({ ws, pool, getReady = () => !!pool, aiTimeoutMs }) {
     return detail(m, me, names, todayIn())
   }
 
-  app.use('/api', apiRouter({ ws, meetings, users, llm, aiTimeoutMs, requireReady, requireUser, wrap, loadDetail }))
+  const about = { pool, modelInfo, hosted: ws.enabled }
+  app.use('/api', importRouter({ ws, meetings, settings, llm, aiTimeoutMs, importTimeoutMs, requireReady, requireUser, wrap }))
+  app.use('/api', apiRouter({ ws, meetings, settings, users, llm, about, aiTimeoutMs, requireReady, requireUser, wrap, loadDetail }))
 
   if (meetings) app.post('/mcp', requireReady, mcpHandler({ ws, tools: buildTools({ meetings }), devUser: devMode ? DEV_USER : null }))
   else app.post('/mcp', requireReady)
   // 无状态模式不开 SSE
   app.get('/mcp', (req, res) => res.status(405).set('Allow', 'POST').json({ error: '只支持 POST' }))
 
-  app.use(pageRouter({ ws, meetings, ready, userOf, wrap, loadDetail }))
+  app.use(pageRouter({ ws, meetings, settings, users, about, ready, userOf, wrap, loadDetail }))
 
   app.use((req, res) => res.status(404).json({ error: '没有这个地址' }))
 

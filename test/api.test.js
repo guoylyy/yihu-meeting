@@ -50,7 +50,7 @@ const search = (who, q) => who.get(`/api/meetings?q=${encodeURIComponent(q)}`)
 test('/health 免登录，返回规定格式', async () => {
   const r = await fetch(`${h.base}/health`)
   assert.equal(r.status, 200)
-  assert.deepEqual(await r.json(), { status: 'ok', version: '0.1.1' })
+  assert.deepEqual(await r.json(), { status: 'ok', version: '0.2.1' })
 })
 
 test('版本号三处一致：清单、package.json、页面', async () => {
@@ -456,13 +456,33 @@ test('条目：单条删除，其他不动', async () => {
   assert.equal((await alice.del(`/api/meetings/${m.id}/items/${first.id}`)).status, 404)
 })
 
-test('条目：页面里待办的复制按钮带一行文本，并说明粘到收件箱', async () => {
+test('条目：页面里待办的 ⋯ 按钮带一行文本，不再放收件箱说明', async () => {
   const m = await withNote(alice)
   await extract(alice, m.id)
   const { text } = await alice.get(`/api/meetings/${m.id}/blocks.html`)
+  assert.ok(text.includes('data-line="整理客户名单 @郑国栋 11-02"'))
+  assert.ok(!text.includes('收件箱'))
+  assert.equal((text.match(/data-line=/g) || []).length, 1) // 只有待办有复制
+})
+
+test('条目：创建者的待办只露指派和 ⋯，复制、删除收进菜单；其他三块还是 ×', async () => {
+  const m = await withNote(alice)
+  await extract(alice, m.id)
+  const { text } = await alice.get(`/api/meetings/${m.id}/blocks.html`)
+  const todo = text.slice(text.indexOf('data-kind="todo"'), text.indexOf('data-kind="risk"'))
+  assert.equal((todo.match(/data-more/g) || []).length, 1)
+  for (const absent of ['data-copy', 'data-del']) assert.ok(!todo.includes(absent), absent)
+  assert.ok(text.slice(0, text.indexOf('data-kind="todo"')).includes('data-del'))
+  const page = (await alice.get(`/meetings/${m.id}`)).text
+  for (const part of ['id="item-menu"', 'id="item-copy"', 'id="item-del"']) assert.ok(page.includes(part), part)
+})
+
+test('条目：参与人没有菜单，只有一个动作就直接放复制', async () => {
+  const m = await withNote(alice, { attendee_ids: [BOB] })
+  await extract(alice, m.id)
+  const { text } = await bob.get(`/meetings/${m.id}`)
   assert.ok(text.includes('data-copy="整理客户名单 @郑国栋 11-02"'))
-  assert.match(text, /粘到「收件箱」的快速录入/)
-  assert.equal((text.match(/data-copy=/g) || []).length, 1) // 只有待办有复制
+  for (const absent of ['data-more', 'id="item-menu"']) assert.ok(!text.includes(absent), absent)
 })
 
 test('条目：表单默认收起，标题带条数，每块一个添加按钮', async () => {
@@ -505,6 +525,22 @@ test('详情页：提炼按钮在纪要标题行，参与人没有', async () =>
   const head = (html) => html.slice(html.indexOf('class="note-head"'), html.indexOf('</div>', html.indexOf('class="note-head"')))
   assert.ok(head((await alice.get(`/meetings/${m.id}`)).text).includes('id="extract-btn"'))
   assert.ok(!(await bob.get(`/meetings/${m.id}`)).text.includes('id="extract-btn"'))
+})
+
+test('详情页：有纪要时默认只读，输入框收起，点编辑才出来', async () => {
+  const m = await withNote(alice, { attendee_ids: [BOB] })
+  const { text } = await alice.get(`/meetings/${m.id}`)
+  assert.match(text, /<textarea[^>]*id="note"[^>]*\shidden>/)
+  assert.match(text, /id="note-edit"/)
+  assert.match(text, /<div class="plain note-view" id="note-text" tabindex="0">/)
+  assert.ok(!(await bob.get(`/meetings/${m.id}`)).text.includes('id="note-edit"'))
+})
+
+test('详情页：还没纪要时直接是输入框，不用先点编辑', async () => {
+  const m = await create(alice)
+  const { text } = await alice.get(`/meetings/${m.id}`)
+  assert.ok(!/<textarea[^>]*id="note"[^>]*\shidden>/.test(text))
+  assert.match(text, /id="note-text" tabindex="0" hidden>/)
 })
 
 // ---------- 列表 ----------
@@ -609,6 +645,215 @@ test('搜索：列表片段带上搜索词，空结果有说明', async () => {
   assert.match(hit.text, /周会/)
   const miss = await alice.get('/api/list.html?q=' + encodeURIComponent('不存在'))
   assert.match(miss.text, /没有找到相关会议/)
+})
+
+// ---------- 项目归类 ----------
+const listProject = (who, project, view = 'all') => who.get(`/api/meetings?view=${view}&project=${encodeURIComponent(project)}`)
+
+test('项目：新建、编辑都能写，详情读得到', async () => {
+  const m = await create(alice, { project: ' 华东渠道 ' })
+  assert.equal(m.project, '华东渠道')
+  assert.equal((await alice.patch(`/api/meetings/${m.id}`, { project: '华南' })).json.project, '华南')
+  assert.equal((await alice.patch(`/api/meetings/${m.id}`, { title: '只改标题' })).json.project, '华南')
+  assert.equal((await alice.patch(`/api/meetings/${m.id}`, { project: '' })).json.project, '')
+  assert.equal((await alice.post('/api/meetings', { title: 'x', starts_at: local(1), project: '项'.repeat(101) })).status, 400)
+})
+
+test('项目过滤：全部、近期、搜索都按项目收窄', async () => {
+  const a = await withNote(alice, { title: '华东周会', project: '华东', starts_at: local(-200) }, '预算')
+  const b = await withNote(alice, { title: '华南周会', project: '华南', starts_at: local(-300) }, '预算')
+  assert.deepEqual(ids(await listProject(alice, '华东')), [a.id])
+  assert.deepEqual(ids(await listProject(alice, '华南', 'recent')), [b.id])
+  assert.deepEqual(ids(await alice.get(`/api/meetings?q=${encodeURIComponent('预算')}&project=${encodeURIComponent('华东')}`)), [a.id])
+  assert.deepEqual(new Set(ids(await listProject(alice, ''))), new Set([a.id, b.id]))
+})
+
+test('项目过滤：大小写不敏感，没有的项目给空列表和说明', async () => {
+  const a = await create(alice, { project: 'Acme' })
+  assert.deepEqual(ids(await listProject(alice, 'acme')), [a.id])
+  assert.deepEqual(ids(await listProject(alice, '没有的项目')), [])
+  assert.match((await alice.get(`/api/list.html?project=${encodeURIComponent('没有的项目')}`)).text, /没有找到相关会议/)
+})
+
+test('项目过滤：不越权，看不到别人的会', async () => {
+  await create(alice, { project: '机密项目' })
+  assert.deepEqual(ids(await listProject(carol, '机密项目')), [])
+  assert.deepEqual((await carol.get('/api/projects')).json.list, [])
+  assert.ok(!(await carol.get('/')).text.includes('机密项目'))
+})
+
+test('项目联想：去重计数，最近开过的排前面', async () => {
+  await create(alice, { project: '老项目', starts_at: local(-5000) })
+  await create(alice, { project: '新项目', starts_at: local(10) })
+  await create(alice, { project: '新项目', starts_at: local(20) })
+  await create(alice, { title: '没项目' })
+  assert.deepEqual((await alice.get('/api/projects')).json.list, [{ name: '新项目', count: 2 }, { name: '老项目', count: 1 }])
+})
+
+test('列表页：项目下拉含全部，选中项回显，联想在表单里', async () => {
+  await create(alice, { project: '华东' })
+  const { text } = await alice.get(`/?view=all&project=${encodeURIComponent('华东')}`)
+  assert.match(text, /<option value="">全部项目<\/option>/)
+  assert.match(text, /<option value="华东" selected>华东<\/option>/)
+  assert.match(text, /<datalist id="project-names">[\s\S]*value="华东"/)
+})
+
+test('列表行：次行带上项目', async () => {
+  await create(alice, { project: '华东' })
+  assert.match((await alice.get('/api/list.html?view=all')).text, /class="project">华东</)
+})
+
+test('右栏：本月会议数、待办数、项目数只算本月且只算看得到的', async () => {
+  const m = await withNote(alice, { project: '华东', starts_at: local(-1) })
+  await extract(alice, m.id)
+  await create(alice, { project: '华南', starts_at: local(-1) })
+  await create(alice, { project: '老项目', starts_at: local(-60 * 24 * 65) })
+  await create(bob, { project: '别人的', starts_at: local(-1) })
+  const { text } = await alice.get('/')
+  assert.match(text, /id="stat-meetings">2</)
+  assert.match(text, /id="stat-todos">1</)
+  assert.match(text, /id="stat-projects">2</)
+})
+
+// ---------- 待办指派 ----------
+const todoOf = async (m) => (await itemsOf(alice, m.id)).find((i) => i.kind === 'todo')
+
+test('指派：改负责人和截止日，部分字段不动', async () => {
+  const m = await withNote(alice)
+  await extract(alice, m.id)
+  const todo = await todoOf(m)
+  const r = await alice.patch(`/api/meetings/${m.id}/items/${todo.id}`, { owner: ' 陈晨 ', due: '2026-12-01' })
+  assert.equal(r.status, 200)
+  assert.deepEqual([r.json.owner_name, r.json.due_date], ['陈晨', '2026-12-01'])
+  await alice.patch(`/api/meetings/${m.id}/items/${todo.id}`, { owner: '王芳' })
+  const after = await todoOf(m)
+  assert.deepEqual([after.owner_name, after.due_date], ['王芳', '2026-12-01'])
+  await alice.patch(`/api/meetings/${m.id}/items/${todo.id}`, { due: null })
+  assert.equal((await todoOf(m)).due_date, null)
+})
+
+test('指派：参与人 403，外人 404，错日期 400，非待办 400', async () => {
+  const m = await withNote(alice, { attendee_ids: [BOB] })
+  await extract(alice, m.id)
+  const items = await itemsOf(alice, m.id)
+  const todo = items.find((i) => i.kind === 'todo')
+  const url = `/api/meetings/${m.id}/items/${todo.id}`
+  assert.equal((await bob.patch(url, { owner: 'x' })).status, 403)
+  assert.equal((await carol.patch(url, { owner: 'x' })).status, 404)
+  assert.equal((await alice.patch(url, { due: '下周' })).status, 400)
+  assert.equal((await alice.patch(`/api/meetings/${m.id}/items/${items[0].id}`, { owner: 'x' })).status, 400)
+  assert.equal((await alice.patch(`/api/meetings/${m.id}/items/999999`, { owner: 'x' })).status, 404)
+})
+
+test('指派：只有创建者的页面有指派按钮', async () => {
+  const m = await withNote(alice, { attendee_ids: [BOB] })
+  await extract(alice, m.id)
+  assert.match((await alice.get(`/meetings/${m.id}`)).text, /data-assign/)
+  assert.ok(!(await bob.get(`/meetings/${m.id}`)).text.includes('data-assign'))
+})
+
+// ---------- 设置 ----------
+test('设置：默认值、部分更新、读回', async () => {
+  assert.deepEqual((await alice.get('/api/settings')).json, { default_attendee_ids: [], summary_lang: 'zh', todo_due_days: 0 })
+  assert.equal((await alice.put('/api/settings', { summary_lang: 'en' })).status, 200)
+  await alice.put('/api/settings', { todo_due_days: 3 })
+  await alice.put('/api/settings', { default_attendee_ids: [BOB, BOB, ALICE] })
+  assert.deepEqual((await alice.get('/api/settings')).json, { default_attendee_ids: [BOB], summary_lang: 'en', todo_due_days: 3 })
+})
+
+test('设置：每人一份，互不影响', async () => {
+  await alice.put('/api/settings', { summary_lang: 'en' })
+  assert.equal((await bob.get('/api/settings')).json.summary_lang, 'zh')
+})
+
+test('设置：非法值 400，不改原值', async () => {
+  await alice.put('/api/settings', { todo_due_days: 7 })
+  for (const body of [{ summary_lang: 'fr' }, { todo_due_days: -1 }, { todo_due_days: 366 }, { todo_due_days: 1.5 }, { todo_due_days: 'x' }, { default_attendee_ids: 'x' }, { default_attendee_ids: [999] }]) {
+    assert.equal((await alice.put('/api/settings', body)).status, 400, JSON.stringify(body))
+  }
+  assert.equal((await alice.get('/api/settings')).json.todo_due_days, 7)
+})
+
+test('设置：默认截止天数对手动补的待办即时生效，写了日期的不动', async () => {
+  const m = await create(alice)
+  await alice.put('/api/settings', { todo_due_days: 5 })
+  const auto = await alice.post(`/api/meetings/${m.id}/items`, { kind: 'todo', text: '没写日期' })
+  assert.match(auto.json.due_date, /^\d{4}-\d{2}-\d{2}$/)
+  const manual = await alice.post(`/api/meetings/${m.id}/items`, { kind: 'todo', text: '写了日期', due: '2026-12-31' })
+  assert.equal(manual.json.due_date, '2026-12-31')
+})
+
+test('设置：默认参与人带进新建表单', async () => {
+  await alice.put('/api/settings', { default_attendee_ids: [BOB] })
+  assert.match((await alice.get('/')).text, /data-defaults="\[{&#34;id&#34;:12,&#34;name&#34;:&#34;李雷&#34;}\]"/)
+})
+
+test('设置页：平台托管时模型只读并说明', async () => {
+  const { status, text } = await alice.get('/settings')
+  assert.equal(status, 200)
+  assert.match(text, /id="s-model">通义千问 Max</)
+  assert.match(text, /由平台统一配置/)
+  for (const id of ['f-people', 's-lang', 's-days', 'picker']) assert.ok(text.includes(`id="${id}"`), id)
+})
+
+test('设置页：平台拿不到模型时写未配置', async () => {
+  const h2 = await startHarness({ keepData: true })
+  h2.platform.state.models = null
+  const owner = await h2.login(ALICE)
+  assert.match((await owner.get('/settings')).text, /id="s-model">未配置</)
+  await h2.close()
+})
+
+// ---------- 关于 ----------
+test('关于：所有字段齐全，不漏账号密码', async () => {
+  const { json } = await alice.get('/api/about')
+  assert.equal(json.version, VERSION)
+  assert.equal(json.mode, '平台')
+  assert.equal(json.model, '通义千问 Max')
+  assert.match(json.database, /^MySQL \d+\.\d+/)
+  assert.equal(json.node, process.version)
+  assert.equal(json.dependencies, 5)
+  assert.ok(json.build_time)
+  assert.ok(!JSON.stringify(json).includes('@127.0.0.1'))
+})
+
+test('关于页：八项都显示', async () => {
+  const { status, text } = await alice.get('/about')
+  assert.equal(status, 200)
+  for (const label of ['版本号', '构建时间', '运行模式', '数据目录', '数据库版本', 'AI 模型', 'Node 版本', '依赖数']) assert.ok(text.includes(`<dt>${label}</dt>`), label)
+})
+
+test('关于：模型拿不到写未配置，不影响页面', async () => {
+  const h2 = await startHarness({ keepData: true })
+  h2.platform.state.models = []
+  const owner = await h2.login(ALICE)
+  assert.equal((await owner.get('/api/about')).json.model, '未配置')
+  await h2.close()
+})
+
+test('顶栏：标题、版本号、设置、关于、退出都在，所有页面一致', async () => {
+  const m = await create(alice)
+  for (const path of ['/', `/meetings/${m.id}`, '/import', '/settings', '/about']) {
+    const { text } = await alice.get(path)
+    for (const part of ['class="yh-top"', '会议与纪要', 'href="settings"', 'href="about"', 'href="logout"']) assert.ok(text.includes(part), `${path} ${part}`)
+    assert.match(text, new RegExp(`id="version">v${VERSION}<`), path)
+  }
+})
+
+test('退出：清会话并跳平台，带上回到本应用的地址', async () => {
+  const other = await h.login(CAROL)
+  const r = await other.get('/logout', { 'x-forwarded-prefix': '/apps/meeting' })
+  assert.equal(r.status, 302)
+  assert.equal(r.headers.get('location'), `${h.platform.url}/logout?redirect=${encodeURIComponent('/apps/meeting/')}`)
+  assert.equal((await other.get('/api/meetings')).status, 401)
+})
+
+test('MCP：get_meeting_notes 带上项目和摘要', async () => {
+  h.platform.state.llm = () => JSON.stringify({ ...SUMMARY, project: '华东', summary: '一句话。' })
+  const m = await withNote(alice)
+  await extract(alice, m.id)
+  const out = (await h.mcp('tools/call', { name: 'get_meeting_notes', arguments: { id: m.id } }, `token-${ALICE}`)).json.result.structuredContent
+  assert.deepEqual([out.project, out.summary], ['华东', '一句话。'])
 })
 
 // ---------- MCP ----------

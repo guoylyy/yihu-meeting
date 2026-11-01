@@ -1,54 +1,90 @@
 <%- include('layout/head') %>
-<main class="page detail">
-  <header class="top">
-    <a class="back" href="./">‹ 会议</a>
-    <% if (version) { %><span class="ver" id="version">v<%= version %></span><% } %>
-  </header>
-
-  <h1 class="m-title"><%= meeting.title %></h1>
-  <p class="meta">
-    <span class="status <%= meeting.status %>"><%= meeting.status_label %></span>
-    <span id="range"><%= meeting.range %></span>
-    <% if (meeting.location) { %><span><%= meeting.location %></span><% } %>
-  </p>
-
-  <ul class="chips" aria-label="参与人">
-    <li><%= meeting.owner.name %>（创建者）</li>
-    <% for (const a of meeting.attendees) { %><li><%= a.name %></li><% } %>
-  </ul>
-
-  <% if (meeting.agenda) { %>
-    <h2 class="group">议程</h2>
-    <p class="plain"><%= meeting.agenda %></p>
-  <% } %>
-
-  <% if (meeting.mine) { %>
-    <div class="actions">
-      <button class="btn" id="edit-btn" type="button">编辑</button>
-      <button class="btn danger" id="delete-btn" type="button">删除</button>
-    </div>
-  <% } %>
-
-  <section class="note-area">
-    <div class="note-head">
-      <h2 class="group">纪要</h2>
-      <% if (meeting.mine) { %>
-        <span class="save-state" id="save-state" role="status"></span>
-        <button class="btn primary" id="extract-btn" type="button">用 AI 提炼</button>
-      <% } %>
+<main class="yh-app yh-app--wide detail">
+  <a class="back" href="./"><span aria-hidden="true">‹</span>会议</a>
+  <div class="yh-page-head head-row">
+    <div>
+      <h1 class="m-title"><%= meeting.title %></h1>
+      <p class="yh-sub"><span class="status <%= meeting.status %>"><%= meeting.status_label %></span> · <span id="range"><%= meeting.range %></span><% if (meeting.location) { %> · <span id="m-location"><%= meeting.location %></span><% } %></p>
     </div>
     <% if (meeting.mine) { %>
-      <textarea id="note" rows="10" placeholder="粘贴会议记录或笔记" aria-label="纪要正文" data-saved-at="<%= meeting.note_saved_at ? meeting.note_saved_at.toISOString() : '' %>"><%= meeting.note %></textarea>
-    <% } else if (meeting.note) { %>
-      <p class="plain" id="note-text"><%= meeting.note %></p>
-    <% } else { %>
-      <p class="note-line">还没有纪要。</p>
+      <div class="head-actions">
+        <button class="yh-btn yh-btn--ghost" id="edit-btn" type="button">编辑</button>
+        <button class="yh-btn yh-btn--ghost yh-btn--danger" id="delete-btn" type="button">删除</button>
+      </div>
     <% } %>
-    <p class="ai-msg" id="ai-msg" role="status" hidden></p>
-  </section>
+  </div>
 
-  <div id="blocks"><%- include('partials/blocks') %></div>
+  <div id="facts"><%- include('partials/facts') %></div>
+
+  <div class="split split--detail">
+    <div>
+      <% if (meeting.agenda) { %>
+        <section class="summary-box">
+          <h2 class="section-title">议程</h2>
+          <p class="plain"><%= meeting.agenda %></p>
+        </section>
+      <% } %>
+      <section class="yh-card note-card">
+        <div class="note-head">
+          <h2 class="section-title" id="note-title">纪要</h2>
+          <% if (meeting.mine) { %>
+            <span class="save-state" id="save-state" role="status"></span>
+            <button class="yh-btn yh-btn--text" id="note-edit" type="button" aria-describedby="note-title">编辑</button>
+            <button class="yh-btn" id="extract-btn" type="button">用 AI 提炼</button>
+          <% } %>
+        </div>
+        <div class="plain note-view" id="note-text" tabindex="0"<% if (!meeting.note) { %> hidden<% } %>><%= meeting.note %></div>
+        <% if (meeting.mine) { %>
+          <textarea class="yh-input note-input" id="note" rows="14" placeholder="粘贴会议记录或笔记" aria-label="纪要正文" data-saved-at="<%= meeting.note_saved_at ? meeting.note_saved_at.toISOString() : '' %>"<% if (meeting.note) { %> hidden<% } %>><%= meeting.note %></textarea>
+        <% } else if (!meeting.note) { %>
+          <p class="note-line">还没有纪要。</p>
+        <% } %>
+        <p class="ai-msg" id="ai-msg" role="status" hidden></p>
+      </section>
+    </div>
+    <div class="detail-rail" id="blocks"><%- include('partials/blocks') %></div>
+  </div>
 </main>
 
-<% if (meeting.mine) { %><%- include('partials/form') %><% } %>
+<% if (meeting.mine) { %>
+  <%- include('partials/form') %>
+  <dialog class="yh-sheet yh-sheet--auto" id="item-menu" aria-labelledby="item-menu-title">
+    <div class="yh-sheet-box">
+      <header class="yh-sheet-head">
+        <h2 id="item-menu-title">待办</h2>
+        <button class="yh-btn yh-btn--text" type="button" data-close aria-label="关闭">×</button>
+      </header>
+      <div class="yh-sheet-body">
+        <p class="note-line menu-text" id="item-menu-text"></p>
+        <button class="yh-btn yh-btn--text menu-item" id="item-copy" type="button">复制</button>
+        <button class="yh-btn yh-btn--text menu-item bad" id="item-del" type="button">删除</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog class="yh-sheet yh-sheet--auto" id="assign" aria-labelledby="assign-title">
+    <form class="yh-sheet-box" id="assign-form" novalidate>
+      <header class="yh-sheet-head">
+        <h2 id="assign-title">指派待办</h2>
+        <button class="yh-btn yh-btn--text" type="button" data-close aria-label="关闭">×</button>
+      </header>
+      <div class="yh-sheet-body">
+        <p class="note-line" id="assign-text"></p>
+        <label class="yh-field"><span class="yh-label">负责人</span>
+          <input id="assign-owner" type="text" maxlength="50" list="assignee-names" autocomplete="off">
+        </label>
+        <datalist id="assignee-names">
+          <option value="<%= meeting.owner.name %>"></option>
+          <% for (const a of meeting.attendees) { %><option value="<%= a.name %>"></option><% } %>
+          <% for (const n of meeting.attendee_names) { %><option value="<%= n %>"></option><% } %>
+        </datalist>
+        <label class="yh-field"><span class="yh-label">截止日（可空）</span>
+          <input id="assign-due" type="date">
+        </label>
+      </div>
+      <footer class="yh-sheet-foot">
+        <button class="yh-btn" id="assign-save" type="submit">保存</button>
+      </footer>
+    </form>
+  </dialog>
+<% } %>
 <%- include('layout/foot') %>
